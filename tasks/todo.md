@@ -1,4 +1,4 @@
-# WebFS Review & Improvement Plan
+# Shared Server Review & Improvement Plan
 
 ## 1. Critical Bugs & Backend Defects
 - [x] **Fix Missing File Upload Route `/api/upload`**: Added `/api/upload` handler in `FileServerService.kt` with robust multipart form-data parsing and raw byte stream fallback.
@@ -36,3 +36,11 @@
 - [x] Build project with `./gradlew assembleDebug` (SUCCESSFUL).
 - [x] Verify unit tests with `./gradlew test` (3/3 PASSED).
 - [x] Verified security path normalization, junk file detection, and filename sanitization.
+
+## 6. Create Comprehensive README.md
+- [x] **Draft Plan**: Outline complete structure for `README.md` including features, tech stack, architecture, API endpoints, build instructions, and security model.
+- [x] **Generate README.md**: Create `README.md` at root directory with rich markdown formatting, badge headers, code blocks, tables, and sitemap tree.
+- [x] **Verification**: Validate `README.md` completeness, file paths, formatting, and test execution.
+- [x] **Document Results**: Created [README.md](file:///Users/thawee.p/Workspaces/github/webfs/README.md) with full feature breakdown, architecture map, HTTP API specification table, build/installation instructions, and unit test details. All unit tests (`FileServerSecurityTest.kt`) verified passing (`3/3 PASSED`).
+
+

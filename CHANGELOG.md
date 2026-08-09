@@ -1,6 +1,6 @@
-# 📦 WebFS Changelog
+# 📦 Shared Server Changelog
 
-All notable changes to the **WebFS** Android Application and Web Frontend file server project will be documented in this file.
+All notable changes to the **Shared Server** Android Application and Web Frontend file server project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to Semantic Versioning.
 
