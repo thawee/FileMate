@@ -6,6 +6,26 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ---
 
+## [1.3.0] - 2026-08-15
+
+### 🚀 Added
+- **Security & Authentication:**
+  - Implemented PIN-based basic authentication to secure the web server interface.
+  - Automatically generates a 4-digit PIN on server startup.
+- **Batch Downloads & Archives:**
+  - `GET /api/download-zip`: Streams multiple selected files/folders as a `.zip` archive on the fly.
+  - `POST /api/unzip`: Extracts uploaded `.zip` archives directly on the device.
+- **Media & UI Enhancements:**
+  - `GET /api/thumbnail`: Generates memory-optimized thumbnails for images and videos using `ThumbnailUtils`.
+  - Added dedicated `/api/rename` endpoint for simpler file renaming.
+  - Added `/api/search` endpoint for recursive file discovery.
+- **Android App Polish:**
+  - Added dynamic QR Code and PIN display in `MainActivity` for quick connection.
+  - Implemented `WakeLock` in `FileServerService` to keep CPU awake during large file transfers.
+  - **Dynamic HTTP Compression**: Text and JSON responses (such as file lists and system stats) are now transparently gzipped via the `Accept-Encoding: gzip` header to dramatically reduce network bandwidth.
+
+---
+
 ## [1.2.0] - 2026-08-08
 
 ### 🚀 Added

@@ -1734,6 +1734,22 @@ public class NioHttpServer implements Runnable {
             return this;
         }
 
+        public byte[] getBody() {
+            if (this.bodyBuffer == null) return new byte[0];
+            byte[] arr = new byte[this.bodyBuffer.remaining()];
+            int pos = this.bodyBuffer.position();
+            this.bodyBuffer.get(arr);
+            this.bodyBuffer.position(pos);
+            return arr;
+        }
+
+        public String getHeader(String name) {
+            for (Map.Entry<String, String> entry : headers.entrySet()) {
+                if (entry.getKey().equalsIgnoreCase(name)) return entry.getValue();
+            }
+            return null;
+        }
+
         protected void buildHeaders() {
             StringBuilder sb = new StringBuilder();
             sb.append("HTTP/1.1 ").append(statusCode).append(" ").append(statusText).append("\r\n");

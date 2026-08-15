@@ -36,6 +36,7 @@ class FileServerService : Service() {
     private var cachedHtml: ByteArray = ByteArray(0)
     private var cachedCss: ByteArray = ByteArray(0)
     private var cachedJs: ByteArray = ByteArray(0)
+    private var wakeLock: android.os.PowerManager.WakeLock? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (intent?.action == "STOP") {
@@ -46,6 +47,11 @@ class FileServerService : Service() {
         }
 
         isRunning = true
+        AuthHelper.generateNewPin()
+        
+        val powerManager = getSystemService(Context.POWER_SERVICE) as android.os.PowerManager
+        wakeLock = powerManager.newWakeLock(android.os.PowerManager.PARTIAL_WAKE_LOCK, "WebFS:ServerWakeLock")
+        wakeLock?.acquire()
         val uriString = intent?.getStringExtra("FOLDER_URI")
         if (uriString != null) {
             sharedRoot = Uri.parse(uriString).path?.let { File(it) }
@@ -137,20 +143,51 @@ class FileServerService : Service() {
         val path = if (queryIdx >= 0) rawPath.substring(0, queryIdx) else rawPath
         val query = if (queryIdx >= 0) rawPath.substring(queryIdx + 1) else ""
 
-        return when (path) {
+        val isPublicAsset = path == "/" || path == "/style.css" || path == "/script.js" || path.startsWith("/api/auth")
+        if (!isPublicAsset) {
+            val authHeader = request.getHeader("authorization", "")
+            val cookie = request.getHeader("cookie", "")
+            val expectedAuth = "Basic " + android.util.Base64.encodeToString("admin:${AuthHelper.currentPin}".toByteArray(), android.util.Base64.NO_WRAP)
+            
+            var isAuthenticated = authHeader == expectedAuth
+            if (!isAuthenticated && cookie.contains("pin=${AuthHelper.currentPin}")) {
+                isAuthenticated = true
+            }
+            
+            if (!isAuthenticated) {
+                val pinQuery = parseQueryParam(query, "pin")
+                if (pinQuery == AuthHelper.currentPin) isAuthenticated = true
+            }
+
+            if (!isAuthenticated) {
+                return NioHttpServer.HttpResponse()
+                    .setStatus(401, "Unauthorized")
+                    .addHeader("WWW-Authenticate", "Basic realm=\"FileServer\"")
+                    .addHeader("Content-Type", "application/json")
+                    .setBody("{\"error\":\"Unauthorized\"}".toByteArray())
+            }
+        }
+
+        val response = when (path) {
             "/" -> htmlResponse(cachedHtml)
             "/style.css" -> cssResponse(cachedCss)
             "/script.js" -> jsResponse(cachedJs)
+            "/api/auth" -> authResponse(query)
             "/api/health" -> jsonResponse("{\"status\":\"ok\"}")
             "/api/system" -> jsonResponse(buildSystemJson())
             "/api/files" -> filesResponse(query)
             "/api/upload" -> uploadResponse(request, query)
             "/api/delete" -> deleteResponse(request, query)
             "/api/move" -> moveResponse(query)
+            "/api/rename" -> renameResponse(query)
             "/api/mkdir" -> mkdirResponse(query)
             "/api/clean-empty-folders" -> cleanEmptyFoldersResponse(query)
             "/api/clean-junk-files" -> cleanJunkFilesResponse(query)
             "/api/storage-stats" -> storageStatsResponse(query)
+            "/api/thumbnail" -> thumbnailResponse(query)
+            "/api/download-zip" -> downloadZipResponse(query)
+            "/api/unzip" -> unzipResponse(request, query)
+            "/api/search" -> searchResponse(query)
             else -> {
                 if (path.startsWith("/api/download/")) {
                     downloadResponse(request, path, query)
@@ -159,6 +196,23 @@ class FileServerService : Service() {
                 }
             }
         }
+
+        val contentType = response.getHeader("Content-Type") ?: ""
+        val acceptEncoding = request.getHeader("accept-encoding", "")
+        if (acceptEncoding.contains("gzip") && 
+            (contentType.contains("text/") || contentType.contains("application/json") || contentType.contains("application/javascript"))) {
+            
+            val body = response.body
+            if (body.isNotEmpty()) {
+                val bos = java.io.ByteArrayOutputStream()
+                java.util.zip.GZIPOutputStream(bos).use { it.write(body) }
+                val gzippedBody = bos.toByteArray()
+                response.setBody(gzippedBody)
+                response.addHeader("Content-Encoding", "gzip")
+            }
+        }
+        
+        return response
     }
 
     private fun htmlResponse(body: ByteArray) = NioHttpServer.HttpResponse()
@@ -605,6 +659,141 @@ class FileServerService : Service() {
         return jsonResponse(json)
     }
 
+    private fun authResponse(query: String): NioHttpServer.HttpResponse {
+        val pin = parseQueryParam(query, "pin")
+        if (AuthHelper.verifyPin(pin)) {
+            val response = jsonResponse("{\"status\":\"ok\"}")
+            response.addHeader("Set-Cookie", "pin=$pin; Path=/; HttpOnly")
+            return response
+        }
+        return errorResponse(401, "Invalid PIN")
+    }
+
+    private fun thumbnailResponse(query: String): NioHttpServer.HttpResponse {
+        val root = sharedRoot ?: return errorResponse(400, "No shared folder")
+        val subPath = parseQueryParam(query, "path")
+        val file = resolveFile(root, subPath) ?: return errorResponse(404, "File not found")
+        
+        val bytes = ThumbnailHelper.generateThumbnail(file)
+        if (bytes != null) {
+            val res = NioHttpServer.HttpResponse()
+                .setStatus(200, "OK")
+                .addHeader("Content-Type", "image/jpeg")
+                .addHeader("Content-Length", bytes.size.toString())
+                .addHeader("Cache-Control", "public, max-age=86400")
+                .setBody(bytes)
+            return res
+        }
+        return errorResponse(404, "No thumbnail available")
+    }
+
+    private fun downloadZipResponse(query: String): NioHttpServer.HttpResponse {
+        val root = sharedRoot ?: return errorResponse(400, "No shared folder")
+        val subPath = parseQueryParam(query, "path")
+        val folder = resolveFile(root, subPath) ?: return errorResponse(404, "Folder not found")
+        
+        val namesStr = parseQueryParam(query, "names").ifEmpty { parseQueryParam(query, "name") }
+        if (namesStr.isEmpty()) return errorResponse(400, "Missing filenames")
+        
+        val names = namesStr.split(",").map { it.trim() }.filter { it.isNotEmpty() }
+        val filesToZip = names.mapNotNull {
+            if (it.contains("/") || it.contains("\\") || it == ".." || it == ".") null
+            else File(folder, it).takeIf { f -> f.exists() && f.parentFile == folder }
+        }
+        
+        if (filesToZip.isEmpty()) return errorResponse(404, "No valid files found")
+        
+        try {
+            val tempZip = File.createTempFile("download", ".zip", applicationContext.cacheDir)
+            val fos = java.io.FileOutputStream(tempZip)
+            ZipHelper.zipFiles(filesToZip, fos)
+            fos.close()
+            
+            val res = nioServer?.createFileResponse(tempZip, NioHttpServer.HttpRequest())
+                ?: return errorResponse(500, "Server error")
+            res.addHeader("Content-Disposition", "attachment; filename=\"archive.zip\"")
+            return res
+        } catch (e: Exception) {
+            return errorResponse(500, "Zip error: ${e.message}")
+        }
+    }
+
+    private fun unzipResponse(request: NioHttpServer.HttpRequest, query: String): NioHttpServer.HttpResponse {
+        val root = sharedRoot ?: return errorResponse(400, "No shared folder")
+        val subPath = parseQueryParam(query, "path")
+        val folder = resolveFile(root, subPath) ?: return errorResponse(404, "Folder not found")
+        
+        val namesStr = parseQueryParam(query, "names").ifEmpty { parseQueryParam(query, "name") }
+        if (namesStr.isEmpty()) return errorResponse(400, "Missing filename")
+        
+        val names = namesStr.split(",").map { it.trim() }.filter { it.isNotEmpty() }
+        var successCount = 0
+        
+        for (name in names) {
+            val zipFile = File(folder, name)
+            if (zipFile.exists() && zipFile.isFile && zipFile.extension.lowercase() == "zip") {
+                val destDir = File(folder, zipFile.nameWithoutExtension)
+                java.io.FileInputStream(zipFile).use { fis ->
+                    if (ZipHelper.unzipFile(fis, destDir)) {
+                        successCount++
+                        scanMedia(destDir.absolutePath)
+                    }
+                }
+            }
+        }
+        return jsonResponse("{\"status\":\"ok\",\"unzipped\":$successCount}")
+    }
+
+    private fun renameResponse(query: String): NioHttpServer.HttpResponse {
+        val root = sharedRoot ?: return errorResponse(400, "No shared folder")
+        val subPath = parseQueryParam(query, "path")
+        val folder = resolveFile(root, subPath) ?: return errorResponse(404, "Folder not found")
+        
+        val oldName = parseQueryParam(query, "oldName")
+        val newName = parseQueryParam(query, "newName")
+        
+        if (oldName.isEmpty() || newName.isEmpty()) return errorResponse(400, "Missing names")
+        if (oldName.contains("/") || newName.contains("/")) return errorResponse(400, "Invalid names")
+        
+        val oldFile = File(folder, oldName)
+        val newFile = File(folder, newName)
+        
+        if (!oldFile.exists()) return errorResponse(404, "File not found")
+        if (newFile.exists()) return errorResponse(409, "Target name already exists")
+        
+        if (oldFile.renameTo(newFile)) {
+            scanMedia(newFile.absolutePath)
+            return jsonResponse("{\"status\":\"ok\"}")
+        }
+        return errorResponse(500, "Failed to rename")
+    }
+
+    private fun searchResponse(query: String): NioHttpServer.HttpResponse {
+        val root = sharedRoot ?: return errorResponse(400, "No shared folder")
+        val subPath = parseQueryParam(query, "path")
+        val folder = resolveFile(root, subPath) ?: return errorResponse(404, "Folder not found")
+        
+        val q = parseQueryParam(query, "q").lowercase()
+        if (q.isEmpty()) return errorResponse(400, "Missing query")
+        
+        val results = mutableListOf<String>()
+        val maxResults = 100
+        
+        folder.walkTopDown().forEach { file ->
+            if (results.size >= maxResults) return@forEach
+            if (file.name.lowercase().contains(q)) {
+                val relPath = file.absolutePath.removePrefix(root.absolutePath).trimStart('/')
+                val escaped = org.json.JSONObject.quote(relPath)
+                val size = if (file.isFile) file.length() else 0L
+                val isDir = file.isDirectory
+                results.add("{\"name\":$escaped,\"size\":$size,\"isDirectory\":$isDir}")
+            }
+        }
+        
+        val jsonStr = "[${results.joinToString(",")}]"
+        return jsonResponse("{\"status\":\"ok\",\"results\":$jsonStr}")
+    }
+
     private fun errorResponse(code: Int, message: String): NioHttpServer.HttpResponse {
         val json = "{\"success\":false,\"status\":\"error\",\"error\":${org.json.JSONObject.quote(message)}}"
         val body = json.toByteArray(Charsets.UTF_8)
@@ -653,6 +842,9 @@ class FileServerService : Service() {
         proxyServer?.stop()
         proxyServer = null
         TrafficMonitor.stop()
+        wakeLock?.let {
+            if (it.isHeld) it.release()
+        }
     }
 
     override fun onBind(intent: Intent?): IBinder? = null

@@ -6,6 +6,12 @@ import java.io.File
 
 object StorageMaintenanceHelper {
 
+    private val PROTECTED_EMPTY_FOLDERS = setOf(
+        "Android", "Android/data", "Android/media", "Android/obb",
+        "DCIM", "Pictures", "Movies", "Music", "Download", "Documents",
+        "Alarms", "Notifications", "Ringtones", "Podcasts", "Audiobooks"
+    )
+
     data class CleanEmptyResult(val removedCount: Int, val removedFolders: List<String>)
     data class CleanJunkResult(val removedCount: Int, val freedBytes: Long, val removedFiles: List<String>)
 
@@ -50,7 +56,12 @@ object StorageMaintenanceHelper {
         if (isEmpty && dir != root) {
             val rootNorm = root.toPath().toAbsolutePath().normalize().toString()
             val dirNorm = dir.toPath().toAbsolutePath().normalize().toString()
-            val relPath = dirNorm.removePrefix(rootNorm).trimStart('/', '\\')
+            val relPath = dirNorm.removePrefix(rootNorm).trimStart('/', '\\').replace('\\', '/')
+            
+            if (PROTECTED_EMPTY_FOLDERS.contains(relPath)) {
+                return false
+            }
+
             val pathStr = dir.absolutePath
             if (dir.delete()) {
                 removedList.add(if (relPath.isEmpty()) dir.name else relPath)
@@ -124,7 +135,14 @@ object StorageMaintenanceHelper {
 
         fun analyze(dir: File) {
             val children = dir.listFiles() ?: return
-            if (children.isEmpty() && dir != root) emptyFoldersCount++
+            if (children.isEmpty() && dir != root) {
+                val rootNorm = root.toPath().toAbsolutePath().normalize().toString()
+                val dirNorm = dir.toPath().toAbsolutePath().normalize().toString()
+                val relPath = dirNorm.removePrefix(rootNorm).trimStart('/', '\\').replace('\\', '/')
+                if (!PROTECTED_EMPTY_FOLDERS.contains(relPath)) {
+                    emptyFoldersCount++
+                }
+            }
 
             for (child in children) {
                 if (child.isDirectory) {

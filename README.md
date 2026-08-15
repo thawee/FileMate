@@ -17,9 +17,11 @@ Whether you need to transfer large files wirelessly across your local network, v
 
 ### 📡 Local Web File Server & Sharing
 - **Zero-Configuration Server:** Instantly host files over local Wi-Fi on customizable HTTP ports.
-- **Real-Time Traffic Monitor:** Tracks live Upload (`Tx`) and Download (`Rx`) speeds along with total bandwidth consumed.
-- **Foreground Service:** Server runs reliably in the background via an Android Foreground Service with notification controls.
-- **One-Tap IP Copy:** Easily copy your server URL (e.g., `http://192.168.1.100:8080`) directly to your clipboard.
+- **PIN Authentication & QR Code Pairing:** Auto-generates a secure 4-digit PIN on startup. Scan the dynamic QR code in the app to quickly connect and authenticate.
+- **Dynamic HTTP GZIP Compression:** Transparently compresses text and JSON responses (like file lists) on the fly, dramatically reducing bandwidth usage and increasing UI loading speed.
+- **Zero-Copy File Streaming:** Uses native `FileChannel.transferTo()` with full support for `HTTP 206 Partial Content` Range requests, allowing you to stream large 4K movies or seek through audio files straight from the browser without draining the phone's battery.
+- **Foreground Service & Wakelock:** Runs reliably in the background with a CPU Wakelock to ensure long batch downloads or heavy uploads are never interrupted when the screen turns off.
+- **Real-Time Traffic Monitor:** Tracks live Upload (`Tx`) and Download (`Rx`) speeds.
 
 ### 🛠️ Storage Maintenance & Cleaning Utilities
 - **Clean OS Junk Files:** Scans and purges system junk files (`.DS_Store`, `Thumbs.db`, `desktop.ini`, `*.tmp`, `*.bak`, `*~`, `._*`) from device storage.
@@ -37,7 +39,9 @@ Whether you need to transfer large files wirelessly across your local network, v
   - Keyboard shortcuts (`←`, `→`, `Space` to Play/Pause, `F` for Fullscreen, `Delete` to Quick Delete, `Esc` to Close).
 - **Text & Code File Viewer:** Formatted code previewer for source files (`.txt`, `.json`, `.md`, `.js`, `.py`, `.html`, `.css`, `.kt`, `.java`, `.sh`, `.xml`, etc.).
 - **Drag & Drop File Uploads:** Supports binary byte stream and multipart form-data uploads up to **500 MB** per request.
-- **Batch Actions:** Batch selection for bulk downloading, moving, or recursive folder deletion.
+- **Batch Actions & Archives:** Batch selection for bulk moving, deleting, or **downloading as a single `.zip` file**. You can also upload a `.zip` file and extract it directly on the device.
+- **Media Thumbnails:** Generates and caches fast, memory-optimized thumbnails for image and video galleries.
+- **Recursive Search:** Instantly scan directories and their children for specific files.
 - **Animated Toast System:** Modern floating toast notifications replacing intrusive browser popups.
 
 ### 🔒 Security & Path Safety
