@@ -37,6 +37,7 @@ class FileServerService : Service() {
     private var cachedCss: ByteArray = ByteArray(0)
     private var cachedJs: ByteArray = ByteArray(0)
     private var wakeLock: android.os.PowerManager.WakeLock? = null
+    private var serverStartTime: Long = 0L
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (intent?.action == "STOP") {
@@ -47,6 +48,7 @@ class FileServerService : Service() {
         }
 
         isRunning = true
+        serverStartTime = System.currentTimeMillis()
         AuthHelper.generateNewPin()
         
         val powerManager = getSystemService(Context.POWER_SERVICE) as android.os.PowerManager
@@ -147,16 +149,16 @@ class FileServerService : Service() {
         if (!isPublicAsset) {
             val authHeader = request.getHeader("authorization", "")
             val cookie = request.getHeader("cookie", "")
-            val expectedAuth = "Basic " + android.util.Base64.encodeToString("admin:${AuthHelper.currentPin}".toByteArray(), android.util.Base64.NO_WRAP)
+            val expectedAuth = "Basic " + android.util.Base64.encodeToString("admin:${AuthHelper.currentPin.value}".toByteArray(), android.util.Base64.NO_WRAP)
             
             var isAuthenticated = authHeader == expectedAuth
-            if (!isAuthenticated && cookie.contains("pin=${AuthHelper.currentPin}")) {
+            if (!isAuthenticated && cookie.contains("pin=${AuthHelper.currentPin.value}")) {
                 isAuthenticated = true
             }
             
             if (!isAuthenticated) {
                 val pinQuery = parseQueryParam(query, "pin")
-                if (pinQuery == AuthHelper.currentPin) isAuthenticated = true
+                if (pinQuery == AuthHelper.currentPin.value) isAuthenticated = true
             }
 
             if (!isAuthenticated) {
@@ -181,13 +183,12 @@ class FileServerService : Service() {
             "/api/move" -> moveResponse(query)
             "/api/rename" -> renameResponse(query)
             "/api/mkdir" -> mkdirResponse(query)
-            "/api/clean-empty-folders" -> cleanEmptyFoldersResponse(query)
-            "/api/clean-junk-files" -> cleanJunkFilesResponse(query)
-            "/api/storage-stats" -> storageStatsResponse(query)
+
             "/api/thumbnail" -> thumbnailResponse(query)
             "/api/download-zip" -> downloadZipResponse(query)
             "/api/unzip" -> unzipResponse(request, query)
             "/api/search" -> searchResponse(query)
+            "/api/exif" -> exifResponse(query)
             else -> {
                 if (path.startsWith("/api/download/")) {
                     downloadResponse(request, path, query)
@@ -248,7 +249,13 @@ class FileServerService : Service() {
         val model = org.json.JSONObject.quote(android.os.Build.MODEL)
         val os = org.json.JSONObject.quote(android.os.Build.VERSION.RELEASE)
         val api = android.os.Build.VERSION.SDK_INT
-        return "{\"model\":$model,\"osVersion\":$os,\"apiLevel\":$api,\"proxyPort\":$PROXY_PORT}"
+        val version = try {
+            org.json.JSONObject.quote(packageManager.getPackageInfo(packageName, 0).versionName)
+        } catch (e: Exception) {
+            "\"1.0\""
+        }
+        val uptimeSeconds = (System.currentTimeMillis() - serverStartTime) / 1000
+        return "{\"model\":$model,\"osVersion\":$os,\"apiLevel\":$api,\"proxyPort\":$PROXY_PORT,\"appVersion\":$version,\"uptimeSeconds\":$uptimeSeconds}"
     }
 
     private fun filesResponse(query: String): NioHttpServer.HttpResponse {
@@ -602,62 +609,6 @@ class FileServerService : Service() {
         }
     }
 
-    private fun cleanEmptyFoldersResponse(query: String): NioHttpServer.HttpResponse {
-        val root = sharedRoot ?: return errorResponse(400, "No shared folder selected")
-        val subPath = parseQueryParam(query, "path")
-        val folder = resolveFile(root, subPath) ?: return errorResponse(404, "Target folder not found")
-
-        val res = StorageMaintenanceHelper.cleanEmptyFolders(folder, applicationContext)
-        val escapedList = res.removedFolders.map { org.json.JSONObject.quote(it) }.joinToString(",")
-        val json = "{\"status\":\"ok\",\"removedCount\":${res.removedCount},\"removedFolders\":[$escapedList]}"
-        return jsonResponse(json)
-    }
-
-    private fun cleanJunkFilesResponse(query: String): NioHttpServer.HttpResponse {
-        val root = sharedRoot ?: return errorResponse(400, "No shared folder selected")
-        val subPath = parseQueryParam(query, "path")
-        val folder = resolveFile(root, subPath) ?: return errorResponse(404, "Target folder not found")
-
-        val res = StorageMaintenanceHelper.cleanJunkFiles(folder, applicationContext)
-        val json = "{\"status\":\"ok\",\"removedCount\":${res.removedCount},\"freedBytes\":${res.freedBytes}}"
-        return jsonResponse(json)
-    }
-
-    private fun storageStatsResponse(query: String): NioHttpServer.HttpResponse {
-        val root = sharedRoot ?: return errorResponse(400, "No shared folder selected")
-        val subPath = parseQueryParam(query, "path")
-        val folder = resolveFile(root, subPath) ?: return errorResponse(404, "Target folder not found")
-
-        val stats = StorageMaintenanceHelper.computeStorageStats(folder)
-        val top10Sb = StringBuilder("[")
-        stats.topFiles.forEachIndexed { idx, entry ->
-            if (idx > 0) top10Sb.append(",")
-            top10Sb.append("{\"name\":${org.json.JSONObject.quote(entry.name)},\"path\":${org.json.JSONObject.quote(entry.relPath)},\"size\":${entry.size},\"lastModified\":${entry.lastModified}}")
-        }
-        top10Sb.append("]")
-
-        val json = """
-            {
-                "status": "ok",
-                "totalSize": ${stats.totalSize},
-                "totalFiles": ${stats.totalFiles},
-                "totalFolders": ${stats.totalFolders},
-                "emptyFoldersCount": ${stats.emptyFoldersCount},
-                "junkFilesCount": ${stats.junkFilesCount},
-                "categories": {
-                    "images": {"size": ${stats.images.size}, "count": ${stats.images.count}},
-                    "videos": {"size": ${stats.videos.size}, "count": ${stats.videos.count}},
-                    "audio": {"size": ${stats.audio.size}, "count": ${stats.audio.count}},
-                    "docs": {"size": ${stats.docs.size}, "count": ${stats.docs.count}},
-                    "archives": {"size": ${stats.archives.size}, "count": ${stats.archives.count}},
-                    "other": {"size": ${stats.other.size}, "count": ${stats.other.count}}
-                },
-                "topFiles": $top10Sb
-            }
-        """.trimIndent()
-
-        return jsonResponse(json)
-    }
 
     private fun authResponse(query: String): NioHttpServer.HttpResponse {
         val pin = parseQueryParam(query, "pin")
@@ -792,6 +743,91 @@ class FileServerService : Service() {
         
         val jsonStr = "[${results.joinToString(",")}]"
         return jsonResponse("{\"status\":\"ok\",\"results\":$jsonStr}")
+    }
+
+    private fun exifResponse(query: String): NioHttpServer.HttpResponse {
+        val root = sharedRoot ?: return errorResponse(400, "No shared folder")
+        val subPath = parseQueryParam(query, "path")
+        val file = resolveFile(root, subPath) ?: return errorResponse(404, "File not found")
+
+        if (!file.isFile) return errorResponse(400, "Not a file")
+
+        var datetime = ""
+        var locationName = ""
+
+        try {
+            val exif = androidx.exifinterface.media.ExifInterface(file.absolutePath)
+            
+            // 1. Get DateTime
+            datetime = exif.getAttribute(androidx.exifinterface.media.ExifInterface.TAG_DATETIME) ?: ""
+            if (datetime.isEmpty()) {
+                datetime = exif.getAttribute(androidx.exifinterface.media.ExifInterface.TAG_DATETIME_ORIGINAL) ?: ""
+            }
+            if (datetime.isEmpty()) {
+                datetime = exif.getAttribute(androidx.exifinterface.media.ExifInterface.TAG_DATETIME_DIGITIZED) ?: ""
+            }
+            
+            // Format datetime a bit better if it's the standard EXIF "YYYY:MM:DD HH:MM:SS"
+            if (datetime.length == 19 && datetime[4] == ':') {
+                datetime = datetime.substring(0, 10).replace(':', '-') + datetime.substring(10)
+            }
+
+            // 2. Get GPS
+            val latLong = exif.latLong
+            if (latLong != null && latLong.size == 2) {
+                val lat = latLong[0]
+                val lon = latLong[1]
+                try {
+                    val geocoder = android.location.Geocoder(applicationContext, java.util.Locale.getDefault())
+                    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+                        // Tiramisu requires async, but in a thread we can just use blocking if available, or we just fallback
+                        // Let's use the blocking one anyway, it might be deprecated but it works for simple cases,
+                        // or we just return lat/lon if it fails
+                        val addresses = geocoder.getFromLocation(lat, lon, 1)
+                        if (!addresses.isNullOrEmpty()) {
+                            val addr = addresses[0]
+                            val city = addr.locality ?: addr.adminArea ?: addr.subAdminArea
+                            val country = addr.countryName
+                            if (city != null && country != null) {
+                                locationName = "$city, $country"
+                            } else if (city != null) {
+                                locationName = city
+                            } else if (country != null) {
+                                locationName = country
+                            }
+                        }
+                    } else {
+                        val addresses = geocoder.getFromLocation(lat, lon, 1)
+                        if (!addresses.isNullOrEmpty()) {
+                            val addr = addresses[0]
+                            val city = addr.locality ?: addr.adminArea ?: addr.subAdminArea
+                            val country = addr.countryName
+                            if (city != null && country != null) {
+                                locationName = "$city, $country"
+                            } else if (city != null) {
+                                locationName = city
+                            } else if (country != null) {
+                                locationName = country
+                            }
+                        }
+                    }
+                } catch (e: Exception) {
+                    Log.e("EXIF", "Geocoder failed", e)
+                }
+                
+                // Fallback to coordinates if geocoding failed to find a name
+                if (locationName.isEmpty()) {
+                    locationName = String.format("%.4f, %.4f", lat, lon)
+                }
+            }
+        } catch (e: Exception) {
+            Log.e("EXIF", "Error parsing EXIF", e)
+        }
+
+        val dtEscaped = org.json.JSONObject.quote(datetime)
+        val locEscaped = org.json.JSONObject.quote(locationName)
+        
+        return jsonResponse("{\"status\":\"ok\",\"datetime\":$dtEscaped,\"location\":$locEscaped}")
     }
 
     private fun errorResponse(code: Int, message: String): NioHttpServer.HttpResponse {

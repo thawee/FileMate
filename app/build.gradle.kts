@@ -11,8 +11,8 @@ android {
         applicationId = "com.example.webfs"
         minSdk = 26
         targetSdk = 36
-        versionCode = 3
-        versionName = "1.3.0"
+        versionCode = 4
+        versionName = "1.4.0"
     }
 
     buildTypes {
@@ -88,4 +88,10 @@ dependencies {
 
   // ZXing for QR Code generation
   implementation("com.google.zxing:core:3.5.3")
+
+  // Casting (DLNA + AirPlay)
+  implementation(libs.okhttp)
+  
+  // EXIF metadata reading
+  implementation(libs.androidx.exifinterface)
 }

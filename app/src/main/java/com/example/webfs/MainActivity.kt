@@ -12,6 +12,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import androidx.activity.ComponentActivity
+import com.example.webfs.cast.CastingManager
+import com.example.webfs.cast.TvCaster
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
@@ -19,6 +21,7 @@ import androidx.compose.animation.core.*
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -229,15 +232,36 @@ fun WebFSScreen() {
     var resultTitle by remember { mutableStateOf("") }
     var resultSummary by remember { mutableStateOf("") }
     var resultItems by remember { mutableStateOf<List<String>>(emptyList()) }
+    
+    val currentPin by AuthHelper.currentPin.collectAsState()
+    val castingManager = remember { CastingManager(context) }
+    val discoveredDevices by castingManager.devices.collectAsState()
 
-    Column(
+    DisposableEffect(Unit) {
+        castingManager.startDiscovery()
+        onDispose { castingManager.stopDiscovery() }
+    }
+
+    Box(
         modifier = Modifier
             .fillMaxSize()
-            .verticalScroll(scrollState)
-            .padding(24.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Top
+            .background(
+                brush = androidx.compose.ui.graphics.Brush.verticalGradient(
+                    colors = listOf(
+                        Color(0xFF0F172A),
+                        Color(0xFF0B0F19)
+                    )
+                )
+            )
     ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .verticalScroll(scrollState)
+                .padding(24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Top
+        ) {
         Spacer(modifier = Modifier.height(24.dp))
 
         // Professional Header
@@ -297,7 +321,8 @@ fun WebFSScreen() {
                 .shadow(if (isServerRunning) 12.dp else 0.dp, RoundedCornerShape(32.dp)),
             shape = RoundedCornerShape(32.dp),
             colors = ButtonDefaults.buttonColors(
-                containerColor = if (isServerRunning) Color(0xFFEF4444) else MaterialTheme.colorScheme.primary
+                containerColor = if (isServerRunning) Color(0xFF1E293B) else MaterialTheme.colorScheme.primary,
+                contentColor = if (isServerRunning) Color(0xFFF43F5E) else Color.White
             ),
             contentPadding = PaddingValues(0.dp)
         ) {
@@ -322,37 +347,68 @@ fun WebFSScreen() {
 
         Spacer(modifier = Modifier.height(24.dp))
 
-        // Tab Navigation for Zero-Scroll Accessibility
-        TabRow(
-            selectedTabIndex = selectedTab,
-            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
-            contentColor = MaterialTheme.colorScheme.primary,
+        // Premium Segmented Control Tabs
+        Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .clip(RoundedCornerShape(16.dp))
+                .padding(horizontal = 24.dp)
+                .clip(RoundedCornerShape(24.dp))
+                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f))
+                .padding(4.dp),
+            horizontalArrangement = Arrangement.SpaceEvenly
         ) {
-            Tab(
-                selected = selectedTab == 0,
-                onClick = { selectedTab = 0 },
-                text = {
-                    Text(
-                        text = "📡 Server & Sharing",
-                        style = MaterialTheme.typography.labelLarge,
-                        fontWeight = if (selectedTab == 0) FontWeight.Bold else FontWeight.Normal
-                    )
-                }
-            )
-            Tab(
-                selected = selectedTab == 1,
-                onClick = { selectedTab = 1 },
-                text = {
-                    Text(
-                        text = "🛠️ Storage Utilities",
-                        style = MaterialTheme.typography.labelLarge,
-                        fontWeight = if (selectedTab == 1) FontWeight.Bold else FontWeight.Normal
-                    )
-                }
-            )
+            val tab0Bg = if (selectedTab == 0) MaterialTheme.colorScheme.primary.copy(alpha = 0.2f) else Color.Transparent
+            val tab1Bg = if (selectedTab == 1) MaterialTheme.colorScheme.primary.copy(alpha = 0.2f) else Color.Transparent
+            val tab2Bg = if (selectedTab == 2) MaterialTheme.colorScheme.primary.copy(alpha = 0.2f) else Color.Transparent
+            
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .clip(RoundedCornerShape(20.dp))
+                    .background(tab0Bg)
+                    .clickable { selectedTab = 0 }
+                    .padding(vertical = 12.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = "📡 Server",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = if (selectedTab == 0) MaterialTheme.colorScheme.primary else Color.LightGray,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .clip(RoundedCornerShape(20.dp))
+                    .background(tab1Bg)
+                    .clickable { selectedTab = 1 }
+                    .padding(vertical = 12.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = "🛠️ Tools",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = if (selectedTab == 1) MaterialTheme.colorScheme.primary else Color.LightGray,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .clip(RoundedCornerShape(20.dp))
+                    .background(tab2Bg)
+                    .clickable { selectedTab = 2 }
+                    .padding(vertical = 12.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = "📺 Cast",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = if (selectedTab == 2) MaterialTheme.colorScheme.primary else Color.LightGray,
+                    fontWeight = FontWeight.Bold
+                )
+            }
         }
 
         Spacer(modifier = Modifier.height(24.dp))
@@ -397,76 +453,90 @@ fun WebFSScreen() {
 
                     Spacer(modifier = Modifier.height(8.dp))
 
-                    // URL Text Badge (Clickable to Copy)
+                    // Connection Details Card
                     val serverUrl = "http://$primaryIp:8080"
                     Surface(
                         shape = RoundedCornerShape(16.dp),
-                        color = MaterialTheme.colorScheme.surfaceVariant,
-                        modifier = Modifier.padding(horizontal = 16.dp),
-                        onClick = {
-                            val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
-                            val clip = android.content.ClipData.newPlainText("WebFS URL", serverUrl)
-                            clipboard.setPrimaryClip(clip)
-                            android.widget.Toast.makeText(context, "Copied $serverUrl to clipboard!", android.widget.Toast.LENGTH_SHORT).show()
-                        }
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = 0.05f)),
+                        modifier = Modifier.padding(horizontal = 16.dp).fillMaxWidth()
                     ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp),
-                            verticalAlignment = Alignment.CenterVertically
+                        Column(
+                            modifier = Modifier.padding(vertical = 12.dp)
                         ) {
-                            Icon(
-                                imageVector = Icons.Default.Info,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.size(20.dp)
-                            )
-                            Spacer(modifier = Modifier.width(12.dp))
-                            Text(
-                                text = serverUrl,
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                            Spacer(modifier = Modifier.width(12.dp))
-                            Text(
-                                text = "📋 Copy",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.primary,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(16.dp))
-
-                    // PIN Display
-                    Surface(
-                        shape = RoundedCornerShape(16.dp),
-                        color = MaterialTheme.colorScheme.secondaryContainer,
-                        modifier = Modifier.padding(horizontal = 16.dp)
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Info,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.onSecondaryContainer,
-                                modifier = Modifier.size(20.dp)
-                            )
-                            Spacer(modifier = Modifier.width(12.dp))
-                            Text(
-                                text = "Access PIN: ",
-                                style = MaterialTheme.typography.titleMedium,
-                                color = MaterialTheme.colorScheme.onSecondaryContainer
-                            )
-                            Text(
-                                text = AuthHelper.currentPin,
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onSecondaryContainer
-                            )
+                            // URL Row
+                            Row(
+                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                                    Icon(
+                                        imageVector = Icons.Default.Info,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(12.dp))
+                                    Text(
+                                        text = serverUrl,
+                                        style = MaterialTheme.typography.titleMedium,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.onSurface,
+                                        maxLines = 1,
+                                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                                    )
+                                }
+                                androidx.compose.material3.IconButton(onClick = {
+                                    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                                    val clip = android.content.ClipData.newPlainText("WebFS URL", serverUrl)
+                                    clipboard.setPrimaryClip(clip)
+                                    android.widget.Toast.makeText(context, "Copied $serverUrl", android.widget.Toast.LENGTH_SHORT).show()
+                                }) {
+                                    Icon(
+                                        imageVector = Icons.Default.Share,
+                                        contentDescription = "Copy",
+                                        tint = MaterialTheme.colorScheme.primary
+                                    )
+                                }
+                            }
+                            
+                            Divider(color = Color.White.copy(alpha = 0.05f), modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
+                            
+                            // Credentials Row
+                            Row(
+                                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Column {
+                                    Text(
+                                        text = "Username",
+                                        style = MaterialTheme.typography.labelMedium,
+                                        color = Color.LightGray
+                                    )
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Text(
+                                        text = "admin",
+                                        style = MaterialTheme.typography.bodyLarge,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color.White
+                                    )
+                                }
+                                Column(horizontalAlignment = Alignment.End) {
+                                    Text(
+                                        text = "Password (PIN)",
+                                        style = MaterialTheme.typography.labelMedium,
+                                        color = Color.LightGray
+                                    )
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Text(
+                                        text = currentPin,
+                                        style = MaterialTheme.typography.bodyLarge,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.primary
+                                    )
+                                }
+                            }
                         }
                     }
 
@@ -486,7 +556,8 @@ fun WebFSScreen() {
                     // Proxy Guide
                     Surface(
                         shape = RoundedCornerShape(16.dp),
-                        color = MaterialTheme.colorScheme.secondary.copy(alpha = 0.15f),
+                        color = Color(0xFF1E293B).copy(alpha = 0.5f),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = 0.05f)),
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(horizontal = 16.dp)
@@ -499,7 +570,7 @@ fun WebFSScreen() {
                                 Icon(
                                     imageVector = Icons.Default.Info,
                                     contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.secondary,
+                                    tint = Color(0xFF38BDF8),
                                     modifier = Modifier.size(20.dp)
                                 )
                                 Spacer(modifier = Modifier.width(8.dp))
@@ -507,7 +578,7 @@ fun WebFSScreen() {
                                     text = "HTTP Proxy Settings",
                                     style = MaterialTheme.typography.titleMedium,
                                     fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.secondary
+                                    color = Color(0xFF38BDF8)
                                 )
                             }
                             Spacer(modifier = Modifier.height(8.dp))
@@ -516,31 +587,39 @@ fun WebFSScreen() {
                                 style = MaterialTheme.typography.bodySmall,
                                 color = Color.LightGray
                             )
-                            Spacer(modifier = Modifier.height(8.dp))
-                            Row {
-                                Text(
-                                    text = "Host: ",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = Color.Gray
-                                )
-                                Text(
-                                    text = primaryIp,
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    fontWeight = FontWeight.Bold,
-                                    color = Color.White
-                                )
-                                Spacer(modifier = Modifier.width(16.dp))
-                                Text(
-                                    text = "Port: ",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = Color.Gray
-                                )
-                                Text(
-                                    text = "8081",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    fontWeight = FontWeight.Bold,
-                                    color = Color.White
-                                )
+                            Spacer(modifier = Modifier.height(12.dp))
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Column {
+                                    Text(
+                                        text = "Host IP",
+                                        style = MaterialTheme.typography.labelMedium,
+                                        color = Color.LightGray
+                                    )
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Text(
+                                        text = primaryIp,
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color.White
+                                    )
+                                }
+                                Column(horizontalAlignment = Alignment.End) {
+                                    Text(
+                                        text = "Port",
+                                        style = MaterialTheme.typography.labelMedium,
+                                        color = Color.LightGray
+                                    )
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Text(
+                                        text = "8081",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color.White
+                                    )
+                                }
                             }
                         }
                     }
@@ -562,7 +641,7 @@ fun WebFSScreen() {
                     )
                 }
             }
-        } else {
+        } else if (selectedTab == 1) {
             // Storage Maintenance Tools Section (Tab 1)
             Surface(
                 shape = RoundedCornerShape(16.dp),
@@ -683,6 +762,118 @@ fun WebFSScreen() {
                     }
                 }
             }
+        } else if (selectedTab == 2) {
+            // Casting (Tab 2)
+            var activeCaster by remember { mutableStateOf<TvCaster?>(null) }
+            var castStatus by remember { mutableStateOf("") }
+            
+            Surface(
+                shape = RoundedCornerShape(16.dp),
+                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp)
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    horizontalAlignment = Alignment.Start
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("📺", style = MaterialTheme.typography.titleMedium)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "Media Casting",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = "Cast media to AirPlay or DLNA devices on your network.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color.LightGray
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    if (discoveredDevices.isEmpty()) {
+                        Text("Scanning for devices on network (mDNS)...", color = Color.Gray, style = MaterialTheme.typography.bodySmall)
+                    } else {
+                        Text("Discovered Devices:", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+                        Spacer(modifier = Modifier.height(8.dp))
+                        
+                        discoveredDevices.forEach { device ->
+                            Surface(
+                                shape = RoundedCornerShape(8.dp),
+                                color = if (activeCaster?.deviceId == device.deviceId) MaterialTheme.colorScheme.primary.copy(alpha = 0.2f) else Color.Black.copy(alpha = 0.2f),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 4.dp)
+                                    .clickable { activeCaster = device }
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(12.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Column {
+                                        Text(device.deviceName, color = Color.White, fontWeight = FontWeight.Bold)
+                                        Text(device.deviceId, color = Color.Gray, style = MaterialTheme.typography.bodySmall)
+                                    }
+                                    if (activeCaster?.deviceId == device.deviceId) {
+                                        Icon(imageVector = Icons.Default.PlayArrow, contentDescription = "Active", tint = MaterialTheme.colorScheme.primary)
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    if (activeCaster != null) {
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                            Button(
+                                onClick = {
+                                    coroutineScope.launch {
+                                        try {
+                                            castStatus = "Sending test image..."
+                                            // Demo: Generate a byte array of the QR code to test AirPlay
+                                            val stream = java.io.ByteArrayOutputStream()
+                                            qrCodeBitmap?.compress(Bitmap.CompressFormat.JPEG, 100, stream)
+                                            val bytes = stream.toByteArray()
+                                            
+                                            // Send it
+                                            activeCaster?.showImage("http://$primaryIp:8080/", bytes)
+                                            castStatus = "Test image sent!"
+                                        } catch (e: Exception) {
+                                            castStatus = "Error: ${e.message}"
+                                        }
+                                    }
+                                },
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Text("Test Cast")
+                            }
+                            Button(
+                                onClick = {
+                                    coroutineScope.launch {
+                                        activeCaster?.stop()
+                                        activeCaster = null
+                                        castStatus = ""
+                                    }
+                                },
+                                modifier = Modifier.weight(1f),
+                                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                            ) {
+                                Text("Stop")
+                            }
+                        }
+                        if (castStatus.isNotEmpty()) {
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(castStatus, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+                        }
+                    }
+                }
+            }
         }
     }
 
@@ -744,6 +935,7 @@ fun WebFSScreen() {
                 }
             }
         )
+    }
     }
 }
 

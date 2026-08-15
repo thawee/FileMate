@@ -135,6 +135,8 @@ async function openPreview(fileName, fileUrl) {
     const isTextCode = ['txt', 'json', 'md', 'js', 'html', 'css', 'py', 'java', 'kt', 'sh', 'xml', 'yml', 'yaml', 'c', 'cpp', 'h', 'csv', 'tsv', 'log', 'properties', 'gradle', 'kts', 'rs', 'go', 'ts'].includes(ext);
 
     if (isImage) {
+        body.classList.add('image-mode');
+        
         if (imagePlaylist.length > 0) {
             const idx = imagePlaylist.findIndex(item => item.name === fileName);
             currentPlaylistIndex = idx !== -1 ? idx : 0;
@@ -143,18 +145,71 @@ async function openPreview(fileName, fileUrl) {
                 counter.style.display = 'inline-block';
                 counter.textContent = `${currentPlaylistIndex + 1} / ${imagePlaylist.length}`;
             }
+            
+            // Preload next image
+            if (currentPlaylistIndex < imagePlaylist.length - 1) {
+                const preloadImg = new Image();
+                preloadImg.src = imagePlaylist[currentPlaylistIndex + 1].url;
+            }
         } else {
             if (controls) controls.style.display = 'none';
             if (counter) counter.style.display = 'none';
         }
 
+        // Blurred Background
+        const bgImg = document.createElement('img');
+        bgImg.src = fileUrl;
+        bgImg.className = 'slideshow-bg-blur';
+        
         const img = document.createElement('img');
         img.src = fileUrl;
         img.alt = fileName;
-        img.style.maxHeight = '75vh';
-        img.style.maxWidth = '100%';
-        img.style.objectFit = 'contain';
+        img.className = 'slideshow-image';
+        
+        // Trigger fade in animation
+        setTimeout(() => img.classList.add('active'), 10);
+        
+        body.appendChild(bgImg);
         body.appendChild(img);
+
+        // EXIF logic
+        const exifOverlay = document.getElementById('exifOverlay');
+        const exifLoc = document.getElementById('exifLocation').querySelector('.exif-text');
+        const exifDate = document.getElementById('exifDate').querySelector('.exif-text');
+        exifLoc.textContent = '...';
+        exifDate.textContent = '...';
+        
+        // Fetch EXIF data
+        fetch('/api/exif?path=' + encodeURIComponent(currentPath === '/' ? '/' + fileName : currentPath + '/' + fileName))
+            .then(res => res.json())
+            .then(data => {
+                if (data.status === 'ok' && (data.datetime || data.location)) {
+                    let hasData = false;
+                    if (data.location) {
+                        exifLoc.textContent = data.location;
+                        document.getElementById('exifLocation').style.display = 'flex';
+                        hasData = true;
+                    } else {
+                        document.getElementById('exifLocation').style.display = 'none';
+                    }
+                    if (data.datetime) {
+                        exifDate.textContent = data.datetime;
+                        document.getElementById('exifDate').style.display = 'flex';
+                        hasData = true;
+                    } else {
+                        document.getElementById('exifDate').style.display = 'none';
+                    }
+                    if (hasData) {
+                        exifOverlay.style.display = 'flex';
+                        exifOverlay.style.opacity = '1';
+                    }
+                } else {
+                    exifOverlay.style.display = 'none';
+                }
+            })
+            .catch(() => {
+                exifOverlay.style.display = 'none';
+            });
 
         // Floating Overlay Navigation Arrows for Images
         if (imagePlaylist.length > 1) {
@@ -174,6 +229,10 @@ async function openPreview(fileName, fileUrl) {
             body.appendChild(nextArrow);
         }
     } else {
+        body.classList.remove('image-mode');
+        const exifOverlay = document.getElementById('exifOverlay');
+        if (exifOverlay) exifOverlay.style.display = 'none';
+
         if (controls) controls.style.display = 'none';
         if (counter) counter.style.display = 'none';
         stopSlideshow();
@@ -239,16 +298,29 @@ function nextImage() {
     showPlaylistImage(currentPlaylistIndex + 1);
 }
 
+function getSlideshowSpeed() {
+    const selector = document.getElementById('slideshowSpeed');
+    return selector ? parseInt(selector.value) : 5000;
+}
+
+function updateSlideshowSpeed() {
+    if (isSlideshowPlaying) {
+        stopSlideshow();
+        toggleSlideshowPlay();
+    }
+}
+
 function toggleSlideshowPlay() {
     const playBtn = document.getElementById('slideshowPlayBtn');
     if (isSlideshowPlaying) {
         stopSlideshow();
     } else {
         isSlideshowPlaying = true;
+        document.body.classList.add('slideshow-playing');
         if (playBtn) playBtn.textContent = '⏸ Pause';
         slideshowTimer = setInterval(() => {
             nextImage();
-        }, 3000);
+        }, getSlideshowSpeed());
     }
 }
 
@@ -258,6 +330,7 @@ function stopSlideshow() {
         slideshowTimer = null;
     }
     isSlideshowPlaying = false;
+    document.body.classList.remove('slideshow-playing');
     const playBtn = document.getElementById('slideshowPlayBtn');
     if (playBtn) playBtn.textContent = '▶ Play';
 }
@@ -321,8 +394,13 @@ function closePreview() {
     if (document.fullscreenElement) {
         document.exitFullscreen().catch(() => {});
     }
-    if (body) body.innerHTML = '';
+    if (body) {
+        body.innerHTML = '';
+        body.classList.remove('image-mode');
+    }
     if (modal) modal.style.display = 'none';
+    const exifOverlay = document.getElementById('exifOverlay');
+    if (exifOverlay) exifOverlay.style.display = 'none';
 }
 
 // Global Keyboard Navigation for Slideshow
@@ -700,167 +778,7 @@ document.addEventListener('click', (e) => {
     if (e.target === toolsModal) closeToolsModal();
 });
 
-// Storage & Maintenance Tools Logic
-function openToolsModal() {
-    const modal = document.getElementById('toolsModal');
-    if (modal) modal.style.display = 'flex';
-    loadStorageStats();
-}
 
-function closeToolsModal() {
-    const modal = document.getElementById('toolsModal');
-    if (modal) modal.style.display = 'none';
-}
-
-async function runCleanEmptyFolders() {
-    if (!confirm('Scan and delete all empty folders recursively in current directory?')) return;
-
-    try {
-        const response = await fetch(`/api/clean-empty-folders?path=${encodeURIComponent(currentPath)}`, {
-            method: 'POST'
-        });
-        if (!response.ok) throw new Error('Failed to clean empty folders');
-        const res = await response.json();
-        if (res.status === 'ok') {
-            if (res.removedCount > 0) {
-                showToast(`Removed ${res.removedCount} empty folder(s)`, 'success');
-            } else {
-                showToast('No empty folders found', 'info');
-            }
-            fetchFiles();
-            loadStorageStats();
-        } else {
-            showToast('Clean empty folders failed', 'error');
-        }
-    } catch (error) {
-        console.error('Error cleaning empty folders:', error);
-        showToast('Error cleaning empty folders: ' + error.message, 'error');
-    }
-}
-
-async function runCleanJunkFiles() {
-    if (!confirm('Purge all OS junk files (.DS_Store, Thumbs.db, .tmp, etc.) recursively?')) return;
-
-    try {
-        const response = await fetch(`/api/clean-junk-files?path=${encodeURIComponent(currentPath)}`, {
-            method: 'POST'
-        });
-        if (!response.ok) throw new Error('Failed to clean junk files');
-        const res = await response.json();
-        if (res.status === 'ok') {
-            if (res.removedCount > 0) {
-                showToast(`Purged ${res.removedCount} junk file(s), freed ${formatBytes(res.freedBytes)}`, 'success');
-            } else {
-                showToast('No OS junk files found', 'info');
-            }
-            fetchFiles();
-            loadStorageStats();
-        } else {
-            showToast('Purge junk files failed', 'error');
-        }
-    } catch (error) {
-        console.error('Error purging junk files:', error);
-        showToast('Error purging junk files: ' + error.message, 'error');
-    }
-}
-
-async function loadStorageStats() {
-    const totalText = document.getElementById('storageTotalText');
-    const topFilesList = document.getElementById('topFilesList');
-    if (totalText) totalText.textContent = 'Analyzing storage usage...';
-    if (topFilesList) topFilesList.innerHTML = '<div style="padding: 0.5rem; color: var(--text-muted); text-align: center;">Scanning files...</div>';
-
-    try {
-        const response = await fetch(`/api/storage-stats?path=${encodeURIComponent(currentPath)}`);
-        if (!response.ok) throw new Error('Failed to fetch storage stats');
-        const stats = await response.json();
-
-        if (totalText) {
-            totalText.textContent = `Total Used: ${formatBytes(stats.totalSize)} across ${stats.totalFiles} file(s) & ${stats.totalFolders} folder(s). Found ${stats.emptyFoldersCount} empty folder(s) & ${stats.junkFilesCount} junk file(s).`;
-        }
-
-        const total = stats.totalSize || 1;
-        const cats = stats.categories || {};
-
-        const setSeg = (id, size) => {
-            const el = document.getElementById(id);
-            if (el) el.style.width = Math.min(100, Math.max(size > 0 ? 1 : 0, (size / total) * 100)) + '%';
-        };
-
-        setSeg('segImages', cats.images ? cats.images.size : 0);
-        setSeg('segVideos', cats.videos ? cats.videos.size : 0);
-        setSeg('segAudio', cats.audio ? cats.audio.size : 0);
-        setSeg('segDocs', cats.docs ? cats.docs.size : 0);
-        setSeg('segArchives', cats.archives ? cats.archives.size : 0);
-        setSeg('segOther', cats.other ? cats.other.size : 0);
-
-        const setLeg = (id, size, count) => {
-            const el = document.getElementById(id);
-            if (el) el.textContent = `${formatBytes(size)} (${count})`;
-        };
-
-        setLeg('legImages', cats.images ? cats.images.size : 0, cats.images ? cats.images.count : 0);
-        setLeg('legVideos', cats.videos ? cats.videos.size : 0, cats.videos ? cats.videos.count : 0);
-        setLeg('legAudio', cats.audio ? cats.audio.size : 0, cats.audio ? cats.audio.count : 0);
-        setLeg('legDocs', cats.docs ? cats.docs.size : 0, cats.docs ? cats.docs.count : 0);
-        setLeg('legArchives', cats.archives ? cats.archives.size : 0, cats.archives ? cats.archives.count : 0);
-        setLeg('legOther', cats.other ? cats.other.size : 0, cats.other ? cats.other.count : 0);
-
-        if (topFilesList) {
-            topFilesList.innerHTML = '';
-            const topFiles = stats.topFiles || [];
-            if (topFiles.length === 0) {
-                topFilesList.innerHTML = '<div style="padding: 0.5rem; color: var(--text-muted); text-align: center;">No files found</div>';
-                return;
-            }
-
-            topFiles.forEach(file => {
-                const fileDir = file.path.includes('/') ? file.path.substring(0, file.path.lastIndexOf('/')) : '';
-                const escapedName = escapeJsArg(file.name);
-                const escapedDir = escapeJsArg(fileDir);
-
-                const item = document.createElement('div');
-                item.className = 'top-file-item';
-                item.innerHTML = `
-                    <div class="top-file-info">
-                        <span class="top-file-name" title="${escapeHtml(file.name)}">${escapeHtml(file.name)}</span>
-                        <span class="top-file-path" title="${escapeHtml(file.path)}">${escapeHtml(file.path)}</span>
-                    </div>
-                    <div style="display: flex; align-items: center; gap: 0.5rem;">
-                        <span style="font-weight: 600; color: var(--primary-color);">${formatBytes(file.size)}</span>
-                        <button class="btn-action delete-btn" style="padding: 0.2rem 0.4rem; font-size: 0.75rem;" onclick="deleteTopFile('${escapedName}', '${escapedDir}')" title="Delete File">🗑️</button>
-                    </div>
-                `;
-                topFilesList.appendChild(item);
-            });
-        }
-    } catch (error) {
-        console.error('Error loading storage stats:', error);
-        if (totalText) totalText.textContent = 'Failed to analyze storage stats';
-    }
-}
-
-async function deleteTopFile(fileName, parentPath) {
-    if (!confirm(`Delete largest file "${fileName}"?`)) return;
-
-    try {
-        const response = await fetch(`/api/delete?name=${encodeURIComponent(fileName)}&path=${encodeURIComponent(parentPath)}`, {
-            method: 'POST'
-        });
-        if (!response.ok) throw new Error('Failed to delete file');
-        const res = await response.json();
-        if (res.status === 'ok') {
-            showToast(`Deleted "${fileName}"`, 'success');
-            fetchFiles();
-            loadStorageStats();
-        } else {
-            showToast('Delete failed', 'error');
-        }
-    } catch (error) {
-        console.error('Error deleting file:', error);
-        showToast('Error deleting file: ' + error.message, 'error');
-    }
-}
 
 document.addEventListener('DOMContentLoaded', () => {
     fetchSystemInfo();
@@ -929,12 +847,23 @@ async function fetchSystemInfo() {
         const info = await response.json();
 
         const systemInfoElement = document.getElementById('systemInfo');
+        
+        // Helper function to format uptime
+        const formatUptime = (seconds) => {
+            const h = Math.floor(seconds / 3600);
+            const m = Math.floor((seconds % 3600) / 60);
+            const s = Math.floor(seconds % 60);
+            if (h > 0) return `${h}h ${m}m`;
+            if (m > 0) return `${m}m ${s}s`;
+            return `${s}s`;
+        };
+
         systemInfoElement.innerHTML = `
-            <span>📱 ${info.model}</span>
+            <span>📱 ${info.model} (Android ${info.osVersion})</span>
             <span>•</span>
-            <span>Android ${info.osVersion} (API ${info.apiLevel})</span>
+            <span>App v${info.appVersion || '1.0'}</span>
             <span>•</span>
-            <span>🛡️ Proxy: ${window.location.hostname}:${info.proxyPort || 8081}</span>
+            <span>⏱️ Uptime: ${formatUptime(info.uptimeSeconds || 0)}</span>
         `;
     } catch (error) {
         console.error('Error fetching system info:', error);
@@ -1006,13 +935,18 @@ function renderFiles(files) {
             iconEmoji = '💻';
         }
 
+        const isProtected = file.isDirectory && currentPath === "" && new Set([
+            "Android", "DCIM", "Pictures", "Movies", "Music", "Download", "Documents",
+            "Alarms", "Notifications", "Ringtones", "Podcasts", "Audiobooks"
+        ]).has(file.name);
+
         const iconHtml = isImage 
             ? `<img src="${fileUrl}" class="file-thumbnail" alt="${escapeHtml(file.name)}" loading="lazy" />`
             : iconEmoji;
 
         if (tbody) {
             const tr = document.createElement('tr');
-            const checkboxHtml = `<td style="text-align: center;" onclick="event.stopPropagation();">
+            const checkboxHtml = isProtected ? `<td style="text-align: center;"></td>` : `<td style="text-align: center;" onclick="event.stopPropagation();">
                 <input type="checkbox" class="custom-checkbox item-checkbox" data-name="${escapedName}" data-is-dir="${file.isDirectory}" onclick="updateBatchToolbar()" />
             </td>`;
 
@@ -1028,8 +962,8 @@ function renderFiles(files) {
                     <td>--</td>
                     <td>${formatDate(file.lastModified)}</td>
                     <td class="action-links">
-                        <button class="btn-action move-btn" onclick="openMoveModal('${escapedName}')">📦 Move</button>
-                        <button class="btn-action delete-btn" onclick="deleteItem('${escapedName}')">🗑️ Delete</button>
+                        ${isProtected ? '' : `<button class="btn-action move-btn" onclick="openMoveModal('${escapedName}')">📦 Move</button>`}
+                        ${isProtected ? '' : `<button class="btn-action delete-btn" onclick="deleteItem('${escapedName}')">🗑️ Delete</button>`}
                     </td>
                 `;
             } else {
@@ -1063,7 +997,7 @@ function renderFiles(files) {
                 ? `<img src="${fileUrl}" alt="${escapeHtml(file.name)}" loading="lazy" />`
                 : iconEmoji;
 
-            const gridCheckbox = `<input type="checkbox" class="custom-checkbox item-checkbox grid-checkbox" data-name="${escapedName}" data-is-dir="${file.isDirectory}" onclick="event.stopPropagation(); updateBatchToolbar();" />`;
+            const gridCheckbox = isProtected ? '' : `<input type="checkbox" class="custom-checkbox item-checkbox grid-checkbox" data-name="${escapedName}" data-is-dir="${file.isDirectory}" onclick="event.stopPropagation(); updateBatchToolbar();" />`;
 
             if (file.isDirectory) {
                 card.innerHTML = `
@@ -1074,8 +1008,8 @@ function renderFiles(files) {
                     <div class="grid-name" title="${escapeHtml(file.name)}">${escapeHtml(file.name)}</div>
                     <div class="grid-meta">${formatDate(file.lastModified)}</div>
                     <div class="grid-actions">
-                        <button class="btn-action move-btn" onclick="openMoveModal('${escapedName}')" title="Move">📦</button>
-                        <button class="btn-action delete-btn" onclick="deleteItem('${escapedName}')" title="Delete">🗑️</button>
+                        ${isProtected ? '' : `<button class="btn-action move-btn" onclick="openMoveModal('${escapedName}')" title="Move">📦</button>`}
+                        ${isProtected ? '' : `<button class="btn-action delete-btn" onclick="deleteItem('${escapedName}')" title="Delete">🗑️</button>`}
                     </div>
                 `;
             } else {

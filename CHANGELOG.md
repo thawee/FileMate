@@ -6,9 +6,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ---
 
-## [1.3.0] - 2026-08-15
+## [1.4.0] - 2026-08-15
 
 ### 🚀 Added
+- **Media Casting (AirPlay & DLNA):**
+  - Integrated a new "Cast Media" tab on the Android App using mDNS (`NsdManager`) to discover local network media players, smart TVs, and AirPlay devices.
+  - Developed custom `DlnaCaster` and `AirPlayCaster` implementations to stream images wirelessly.
+  - Tested AirPlay HTTP PUT payload logic directly over the network to send binary JPEG images.
+- **Web Slideshow Experience & Metadata:**
+  - Added a new `/api/exif` endpoint that extracts GPS coordinates and timestamp from images.
+  - Implemented reverse-geocoding to display the location (e.g. "Paris, France") and date on a frosted-glass overlay.
+  - Improved the slideshow visual layout by injecting a dynamic blurred, screen-filling background (`backdrop-filter`) to handle mixed aspect ratio images elegantly.
+  - Updated the slideshow speed dropdown (3s, 5s, 10s, 20s) with a legible interface, defaulting to 5s.
+
+---
+
+## [1.3.0] - 2026-08-15
 - **Security & Authentication:**
   - Implemented PIN-based basic authentication to secure the web server interface.
   - Automatically generates a 4-digit PIN on server startup.

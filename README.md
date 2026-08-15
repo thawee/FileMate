@@ -29,13 +29,20 @@ Whether you need to transfer large files wirelessly across your local network, v
 - **Storage Analytics & Breakdown:** Computes category storage distribution (Images, Videos, Audio, Documents, Archives, Other) and lists the **Top 10 Largest Files**.
 - **Dual Execution:** Perform cleaning operations directly on Android via Material 3 native dialogs or remotely through the Web UI.
 
+### 📺 Media Casting (AirPlay & DLNA)
+- **Local Network Discovery:** Uses Android `NsdManager` (mDNS) to instantly find local smart TVs, DLNA media renderers, and Apple AirPlay devices.
+- **Direct Wireless Streaming:** Cast high-quality JPEG images straight from your device to compatible TVs via the Android app's "Cast Media" tab.
+
 ### 🎨 Modern Web Dashboard (Web UI)
 - **Responsive Dark Theme:** Built with modern CSS Glassmorphism, smooth animations, and high-contrast typography.
 - **Sticky Header Architecture:** Fixed top header with live search (`/`), storage tools button, and action controls while file lists scroll independently.
 - **Image Preview Slideshow Mode:**
   - Full-screen lightbox viewer supporting `.jpg`, `.png`, `.gif`, `.webp`, `.svg`, etc.
-  - Playlist auto-advance timer (3-second autoplay), manual previous/next buttons, and counter badges.
+  - Playlist auto-advance timer (adjustable: 3s, 5s, 10s, 20s), manual previous/next buttons, and counter badges.
+  - **Dynamic Blurred Backgrounds:** Automatically creates a frosted, screen-filling background from your image to elegantly handle mixed aspect ratios.
+  - **EXIF Metadata Engine:** Extracts embedded GPS coordinates and timestamps from photos, reverse-geocoding them (e.g. "Tokyo, Japan") and displaying the info on a sleek glass overlay.
   - **Quick Delete (`🗑️`):** One-click button to delete the active image and auto-advance to the next photo.
+  - Interactive floating overlay navigation arrows (`‹` and `›`) on left/right sides of preview container.
   - Keyboard shortcuts (`←`, `→`, `Space` to Play/Pause, `F` for Fullscreen, `Delete` to Quick Delete, `Esc` to Close).
 - **Text & Code File Viewer:** Formatted code previewer for source files (`.txt`, `.json`, `.md`, `.js`, `.py`, `.html`, `.css`, `.kt`, `.java`, `.sh`, `.xml`, etc.).
 - **Drag & Drop File Uploads:** Supports binary byte stream and multipart form-data uploads up to **500 MB** per request.
