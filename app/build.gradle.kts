@@ -5,14 +5,14 @@ plugins {
 }
 
 android {
-    namespace = "com.example.webfs"
+    namespace = "com.apincer.fileserver"
     compileSdk = 37
     defaultConfig {
-        applicationId = "com.example.webfs"
+        applicationId = "com.apincer.fileserver"
         minSdk = 26
         targetSdk = 36
-        versionCode = 4
-        versionName = "1.4.0"
+        versionCode = 6
+        versionName = "1.6.0"
     }
 
     buildTypes {
@@ -91,7 +91,14 @@ dependencies {
 
   // Casting (DLNA + AirPlay)
   implementation(libs.okhttp)
+  implementation(libs.play.services.cast.framework)
+  implementation(libs.androidx.mediarouter)
+  implementation(libs.androidx.appcompat)
   
   // EXIF metadata reading
   implementation(libs.androidx.exifinterface)
+
+  // Image Loading (Coil)
+  implementation("io.coil-kt:coil-compose:2.6.0")
+  implementation("io.coil-kt:coil-video:2.6.0")
 }

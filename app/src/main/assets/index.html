@@ -17,23 +17,33 @@
             <div class="header-titles">
                 <div style="display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;">
                     <h1>My Files</h1>
-                    <button class="btn icon-btn" id="refreshBtn" title="Refresh">🔄</button>
-                    <button class="btn icon-btn" id="viewToggleBtn" title="Toggle List/Grid View" onclick="toggleViewMode()">▦ Grid</button>
+                    <button class="btn icon-btn" id="refreshBtn" title="Refresh files" aria-label="Refresh files">🔄</button>
+                    <button class="btn icon-btn" id="viewToggleBtn" title="Toggle List/Grid View" aria-label="Toggle List or Grid View" onclick="toggleViewMode()">▦ Grid</button>
+                    <button class="btn icon-btn" id="themeToggleBtn" title="Toggle Theme" aria-label="Toggle Dark or Light Theme" onclick="toggleTheme()">☀️</button>
+                    <button class="btn icon-btn" id="hiddenToggleBtn" title="Toggle Hidden Files" aria-label="Toggle Hidden Files" onclick="toggleHidden()">👁️</button>
+                    <select id="sortSelector" class="btn icon-btn sort-selector" aria-label="Sort Files" onchange="handleSortSelect(this.value)">
+                        <option value="name-asc">Sort: Name (A-Z)</option>
+                        <option value="name-desc">Sort: Name (Z-A)</option>
+                        <option value="size-asc">Sort: Size (Asc)</option>
+                        <option value="size-desc">Sort: Size (Desc)</option>
+                        <option value="time-desc">Sort: Date (Newest)</option>
+                        <option value="time-asc">Sort: Date (Oldest)</option>
+                    </select>
                 </div>
                 <p id="systemInfo" class="system-info">Loading device info...</p>
             </div>
             <div style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
                 <div class="search-box">
-                    <span class="search-icon">🔍</span>
-                    <input type="text" id="searchInput" class="search-input" placeholder="Search files... (/)" oninput="handleSearch()" />
-                    <button id="clearSearchBtn" class="clear-search-btn" onclick="clearSearch()" style="display: none;">✕</button>
+                    <span class="search-icon" aria-hidden="true">🔍</span>
+                    <input type="text" id="searchInput" class="search-input" placeholder="Search files... (/)" aria-label="Search files" oninput="handleSearch()" />
+                    <button id="clearSearchBtn" class="clear-search-btn" aria-label="Clear search" onclick="clearSearch()" style="display: none;">✕</button>
                 </div>
-                <button class="btn icon-btn" id="selectAllBtn" onclick="toggleSelectAllBtn()" title="Select All (Ctrl+A / Cmd+A)">☑ Select All</button>
-                <button class="btn icon-btn" onclick="openMkdirModal()" title="New Folder">📁 New Folder</button>
+                <button class="btn icon-btn" id="selectAllBtn" onclick="toggleSelectAllBtn()" title="Select All (Ctrl+A / Cmd+A)" aria-label="Select All Files">☑ Select All</button>
+                <button class="btn icon-btn" onclick="openMkdirModal()" title="New Folder" aria-label="New Folder">📁 New Folder</button>
 
                 <div class="upload-btn-wrapper">
-                    <button class="btn primary-btn">Upload File</button>
-                    <input type="file" id="fileInput" name="myfile" multiple />
+                    <button class="btn primary-btn" aria-label="Upload File">Upload File</button>
+                    <input type="file" id="fileInput" name="myfile" multiple aria-label="Choose file to upload" />
                 </div>
             </div>
         </header>
@@ -81,31 +91,60 @@
         <div class="modal-content glass-panel" style="max-width: 90vw; max-height: 90vh;">
             <div class="modal-header">
                 <div style="display: flex; align-items: center; gap: 0.75rem;">
-                    <h3 id="previewTitle">File Preview</h3>
+                    <h3 id="previewTitle" class="modal-title-text">File Preview</h3>
                     <span id="slideshowCounter" class="slideshow-counter" style="display: none;">1 / 1</span>
                 </div>
                 <div class="modal-actions" style="display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;">
-                    <div id="slideshowControls" class="slideshow-controls" style="display: none;">
-                        <button class="btn icon-btn" onclick="prevImage()" title="Previous Image (←)">◀</button>
+                    <div id="slideshowControls" class="slideshow-controls" style="display: none; align-items: center; gap: 0.25rem;">
+                        <button class="btn icon-btn premium-icon-btn" onclick="prevImage()" title="Previous Image (←)">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
+                        </button>
                         <select id="slideshowSpeed" class="glass-input" style="padding: 0.3rem; margin: 0 0.2rem; font-size: 0.8rem; background: rgba(255,255,255,0.1); color: white; cursor: pointer; border: 1px solid rgba(255,255,255,0.2); border-radius: 6px;" title="Slideshow Speed" onchange="updateSlideshowSpeed()">
                             <option value="3000" style="color: black;">3s</option>
                             <option value="5000" style="color: black;" selected>5s</option>
                             <option value="10000" style="color: black;">10s</option>
                             <option value="20000" style="color: black;">20s</option>
                         </select>
-                        <button class="btn icon-btn" id="slideshowPlayBtn" onclick="toggleSlideshowPlay()" title="Auto Play / Pause (Space)">▶ Play</button>
-                        <button class="btn icon-btn" onclick="nextImage()" title="Next Image (→)">▶</button>
-                        <button class="btn icon-btn" onclick="toggleFullscreenPreview()" title="Fullscreen (F)">⛶</button>
-                        <button class="btn icon-btn" onclick="quickDeleteCurrentImage()" title="Quick Delete & Next Image (Delete)" style="background: rgba(239, 68, 68, 0.2); color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.3);">🗑️</button>
+                        <button class="btn icon-btn premium-icon-btn" id="slideshowPlayBtn" onclick="toggleSlideshowPlay()" title="Auto Play / Pause (Space)">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="play-icon"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                        </button>
+                        <button class="btn icon-btn premium-icon-btn" onclick="nextImage()" title="Next Image (→)">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+                        </button>
+                        
+                        <div class="divider-vertical"></div>
+
+                        <div id="zoomControls" class="zoom-controls" style="display: none; align-items: center; gap: 0.25rem;">
+                            <button class="btn icon-btn premium-icon-btn" onclick="zoomOut()" title="Zoom Out (-)" aria-label="Zoom Out">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
+                            </button>
+                            <button class="btn icon-btn premium-icon-btn zoom-level-badge" id="zoomLevelBadge" onclick="resetZoom()" title="Reset Zoom (0)" aria-label="Reset Zoom">100%</button>
+                            <button class="btn icon-btn premium-icon-btn" onclick="zoomIn()" title="Zoom In (+)" aria-label="Zoom In">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
+                            </button>
+                        </div>
+                        <div id="zoomDivider" class="divider-vertical" style="display: none;"></div>
+
+                        <button class="btn icon-btn premium-icon-btn" onclick="toggleFullscreenPreview()" title="Fullscreen (F)">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
+                        </button>
+                        <button class="btn icon-btn premium-icon-btn danger-hover" onclick="quickDeleteCurrentImage()" title="Quick Delete & Next Image (Delete)">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
+                        </button>
                     </div>
-                    <a id="previewNewTab" href="#" target="_blank" class="btn icon-btn" title="Open in new tab">↗</a>
-                    <button class="btn icon-btn" onclick="closePreview()" title="Close (Esc)">✕</button>
+                    <div class="divider-vertical"></div>
+                    <a id="previewNewTab" href="#" target="_blank" class="btn icon-btn premium-icon-btn" title="Open in new tab">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h6"/><path d="m21 3-9 9"/><path d="M15 3h6v6"/></svg>
+                    </a>
+                    <button class="btn icon-btn premium-icon-btn" onclick="closePreview()" title="Close (Esc)">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+                    </button>
                 </div>
             </div>
             <div class="modal-body" id="previewBody" style="position: relative;"></div>
             <div id="exifOverlay" class="exif-overlay" style="display: none;">
-                <div id="exifLocation" class="exif-item"><span class="exif-icon">📍</span> <span class="exif-text"></span></div>
-                <div id="exifDate" class="exif-item"><span class="exif-icon">🕒</span> <span class="exif-text"></span></div>
+                <div id="exifLocation" class="exif-item"><span class="exif-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg></span> <span class="exif-text"></span></div>
+                <div id="exifDate" class="exif-item"><span class="exif-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></span> <span class="exif-text"></span></div>
             </div>
         </div>
     </div>
@@ -156,12 +195,28 @@
             <span id="batchCount">0</span> selected
         </div>
         <div class="batch-buttons">
+            <button class="btn-action view-btn" onclick="batchDownloadZip()">⬇ ZIP Selected</button>
             <button class="btn-action move-btn" onclick="openBatchMoveModal()">📦 Move Selected</button>
             <button class="btn-action delete-btn" onclick="batchDeleteSelected()">🗑️ Delete Selected</button>
             <button class="btn icon-btn" onclick="clearSelection()" title="Clear Selection">✕</button>
         </div>
     </div>
 
+    <!-- QR Code Modal -->
+    <div id="qrModal" class="modal-overlay" style="display: none;">
+        <div class="modal-content glass-panel" style="max-width: 400px;">
+            <div class="modal-header">
+                <h3 id="qrFileName">Share</h3>
+                <button class="btn icon-btn" onclick="closeQrModal()" title="Close">✕</button>
+            </div>
+            <div class="modal-body" style="flex-direction: column; text-align: center; padding: 2rem;">
+                <img id="qrImage" src="" alt="QR Code" style="width: 256px; height: 256px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.2);" />
+                <p style="margin-top: 1.5rem; color: var(--text-muted); font-size: 0.9rem;">Scan this QR code from another device on the same network to open or download this file.</p>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <script src="script.js"></script>
 </body>
 </html>

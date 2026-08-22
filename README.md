@@ -35,21 +35,29 @@ Whether you need to transfer large files wirelessly across your local network, v
 
 ### 🎨 Modern Web Dashboard (Web UI)
 - **Responsive Dark Theme:** Built with modern CSS Glassmorphism, smooth animations, and high-contrast typography.
-- **Sticky Header Architecture:** Fixed top header with live search (`/`), storage tools button, and action controls while file lists scroll independently.
-- **Image Preview Slideshow Mode:**
+- **Sticky Header Architecture:** Fixed top header with live search (`/`), sort selector dropdown, storage tools button, and action controls while file lists scroll independently.
+- **Image Preview & Lightbox Zoom Engine:**
   - Full-screen lightbox viewer supporting `.jpg`, `.png`, `.gif`, `.webp`, `.svg`, etc.
-  - Playlist auto-advance timer (adjustable: 3s, 5s, 10s, 20s), manual previous/next buttons, and counter badges.
+  - **Interactive Multi-Level Zoom & Pan:** Scale from $50\%$ to $500\%$ ($0.5\times$ to $5.0\times$) using header toolbar buttons (`+`, `−`), interactive percentage badge (`100%`), mouse scroll wheel, trackpad pinch, or double-click / double-tap to toggle $1\times \leftrightarrow 2.5\times$.
+  - **Freeform Drag Panning:** Click and drag to smoothly pan across large high-res photos when zoomed in ($> 100\%$) with dynamic `grab`/`grabbing` cursor states.
   - **Dynamic Blurred Backgrounds:** Automatically creates a frosted, screen-filling background from your image to elegantly handle mixed aspect ratios.
   - **EXIF Metadata Engine:** Extracts embedded GPS coordinates and timestamps from photos, reverse-geocoding them (e.g. "Tokyo, Japan") and displaying the info on a sleek glass overlay.
   - **Quick Delete (`🗑️`):** One-click button to delete the active image and auto-advance to the next photo.
   - Interactive floating overlay navigation arrows (`‹` and `›`) on left/right sides of preview container.
-  - Keyboard shortcuts (`←`, `→`, `Space` to Play/Pause, `F` for Fullscreen, `Delete` to Quick Delete, `Esc` to Close).
+  - **Keyboard Shortcuts:** `←`, `→` for navigation, `Space` to Play/Pause, `F` for Fullscreen, `+` / `-` to Zoom In/Out, `0` to Reset Zoom, `Delete` to Quick Delete, `Esc` to Close.
 - **Text & Code File Viewer:** Formatted code previewer for source files (`.txt`, `.json`, `.md`, `.js`, `.py`, `.html`, `.css`, `.kt`, `.java`, `.sh`, `.xml`, etc.).
 - **Drag & Drop File Uploads:** Supports binary byte stream and multipart form-data uploads up to **500 MB** per request.
 - **Batch Actions & Archives:** Batch selection for bulk moving, deleting, or **downloading as a single `.zip` file**. You can also upload a `.zip` file and extract it directly on the device.
 - **Media Thumbnails:** Generates and caches fast, memory-optimized thumbnails for image and video galleries.
 - **Recursive Search:** Instantly scan directories and their children for specific files.
 - **Animated Toast System:** Modern floating toast notifications replacing intrusive browser popups.
+
+### 📱 Android Native Experience (Jetpack Compose)
+- **Predictive Hierarchical Back Navigation:** Intercepts system back gestures with `BackHandler` to traverse subdirectories before exiting the app.
+- **Adaptive Responsive Grid:** Automatically adapts column count on foldables, tablets, and landscape viewports (`GridCells.Adaptive(minSize = 130.dp)`).
+- **In-App Double-Tap Zoom:** Double-tap gesture zoom ($1\times \leftrightarrow 2.5\times$) in native image preview.
+- **External Media Launcher:** Launch videos and music in external system players (e.g. VLC) via `Intent.ACTION_VIEW` and FileProvider.
+- **Unsaved Changes Safeguards:** Confirmation dialog in text editor to prevent accidental loss of modifications.
 
 ### 🔒 Security & Path Safety
 - **Path Traversal Protection:** Normalizes all paths (`toPath().toAbsolutePath().normalize()`) to prevent directory traversal attacks (`../`).
@@ -67,19 +75,21 @@ SharedServer/
 ├── app/
 │   ├── src/
 │   │   ├── main/
-│   │   │   ├── java/com/example/webfs/
+│   │   │   ├── java/com/apincer/fileserver/
 │   │   │   │   ├── MainActivity.kt               # Main Jetpack Compose UI with Tab navigation
 │   │   │   │   ├── FileServerService.kt          # Android Foreground Service & HTTP Server handlers
 │   │   │   │   ├── StorageMaintenanceHelper.kt   # Kotlin utility helper for storage cleanup & stats
 │   │   │   │   ├── HttpProxyServer.kt            # HTTP Proxy wrapper & request routing
 │   │   │   │   ├── TrafficMonitor.kt             # Real-time network speed & bandwidth tracker
+│   │   │   │   ├── cast/                         # DLNA & AirPlay casting engine
+│   │   │   │   ├── ui/browser/                   # File browser, preview, text editor, slideshow screens
 │   │   │   │   └── theme/                        # Material 3 Compose Color, Type, Theme definitions
 │   │   │   ├── assets/                           # Web UI Single Page Application assets
 │   │   │   │   ├── index.html                    # Single-page web dashboard HTML structure
 │   │   │   │   ├── style.css                     # Glassmorphism dark mode stylesheet
 │   │   │   │   └── script.js                     # Frontend interactive logic & API client
 │   │   │   └── AndroidManifest.xml              # Android permissions & service declarations
-│   │   └── test/java/com/example/webfs/
+│   │   └── test/java/com/apincer/fileserver/
 │   │       └── FileServerSecurityTest.kt         # Unit tests for security & file utilities
 │   └── build.gradle.kts                          # App module build script
 ├── tasks/

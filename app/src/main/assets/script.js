@@ -63,11 +63,28 @@ function handleSort(col) {
     filterAndRenderFiles();
 }
 
+function handleSortSelect(val) {
+    if (!val) return;
+    const [col, dir] = val.split('-');
+    sortCol = col;
+    sortDesc = (dir === 'desc');
+    updateSortIndicators();
+    filterAndRenderFiles();
+}
+
 function updateSortIndicators() {
     const getIndicator = (col) => sortCol === col ? (sortDesc ? ' ▼' : ' ▲') : '';
-    document.getElementById('thName').textContent = 'Name' + getIndicator('name');
-    document.getElementById('thSize').textContent = 'Size' + getIndicator('size');
-    document.getElementById('thTime').textContent = 'Modified' + getIndicator('time');
+    const thName = document.getElementById('thName');
+    const thSize = document.getElementById('thSize');
+    const thTime = document.getElementById('thTime');
+    if (thName) thName.textContent = 'Name' + getIndicator('name');
+    if (thSize) thSize.textContent = 'Size' + getIndicator('size');
+    if (thTime) thTime.textContent = 'Modified' + getIndicator('time');
+
+    const selector = document.getElementById('sortSelector');
+    if (selector) {
+        selector.value = `${sortCol}-${sortDesc ? 'desc' : 'asc'}`;
+    }
 }
 
 function filterAndRenderFiles() {
@@ -112,6 +129,62 @@ let currentPlaylistIndex = -1;
 let slideshowTimer = null;
 let isSlideshowPlaying = false;
 
+let currentZoom = 1;
+let panX = 0;
+let panY = 0;
+let isPanning = false;
+let startPanX = 0;
+let startPanY = 0;
+const MIN_ZOOM = 0.5;
+const MAX_ZOOM = 5.0;
+const ZOOM_STEP = 0.25;
+
+function applyZoom(imgElement, animate = true) {
+    const img = imgElement || document.querySelector('.modal-body img.slideshow-image');
+    const badge = document.getElementById('zoomLevelBadge');
+    if (badge) {
+        badge.textContent = `${Math.round(currentZoom * 100)}%`;
+    }
+
+    if (!img) return;
+
+    if (animate) {
+        img.classList.remove('panning');
+    } else {
+        img.classList.add('panning');
+    }
+
+    if (currentZoom > 1) {
+        img.classList.add('zoomed');
+    } else {
+        img.classList.remove('zoomed');
+        img.classList.remove('grabbing');
+    }
+
+    img.style.transform = `translate(${panX}px, ${panY}px) scale(${currentZoom})`;
+}
+
+function zoomIn() {
+    currentZoom = Math.min(Math.round((currentZoom + ZOOM_STEP) * 100) / 100, MAX_ZOOM);
+    applyZoom();
+}
+
+function zoomOut() {
+    currentZoom = Math.max(Math.round((currentZoom - ZOOM_STEP) * 100) / 100, MIN_ZOOM);
+    if (currentZoom <= 1) {
+        panX = 0;
+        panY = 0;
+    }
+    applyZoom();
+}
+
+function resetZoom() {
+    currentZoom = 1;
+    panX = 0;
+    panY = 0;
+    applyZoom();
+}
+
 function escapeJsArg(text) {
     return text.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
 }
@@ -123,10 +196,13 @@ async function openPreview(fileName, fileUrl) {
     const newTabLink = document.getElementById('previewNewTab');
     const controls = document.getElementById('slideshowControls');
     const counter = document.getElementById('slideshowCounter');
+    const zoomControls = document.getElementById('zoomControls');
+    const zoomDivider = document.getElementById('zoomDivider');
 
     title.textContent = fileName;
     newTabLink.href = fileUrl;
     body.innerHTML = '';
+    resetZoom();
 
     const ext = fileName.split('.').pop().toLowerCase();
     const isImage = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'bmp', 'ico'].includes(ext);
@@ -136,6 +212,8 @@ async function openPreview(fileName, fileUrl) {
 
     if (isImage) {
         body.classList.add('image-mode');
+        if (zoomControls) zoomControls.style.display = 'inline-flex';
+        if (zoomDivider) zoomDivider.style.display = 'block';
         
         if (imagePlaylist.length > 0) {
             const idx = imagePlaylist.findIndex(item => item.name === fileName);
@@ -166,6 +244,74 @@ async function openPreview(fileName, fileUrl) {
         img.alt = fileName;
         img.className = 'slideshow-image';
         
+        // Double-click to toggle zoom (1x <-> 2.5x)
+        img.addEventListener('dblclick', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            if (currentZoom > 1) {
+                resetZoom();
+            } else {
+                currentZoom = 2.5;
+                panX = 0;
+                panY = 0;
+                applyZoom(img);
+            }
+        });
+
+        // Mouse Drag to Pan when Zoomed
+        img.addEventListener('mousedown', (e) => {
+            if (currentZoom <= 1 || e.button !== 0) return;
+            isPanning = true;
+            startPanX = e.clientX - panX;
+            startPanY = e.clientY - panY;
+            img.classList.add('grabbing');
+            e.preventDefault();
+        });
+
+        // Touch gestures (Pinch to Zoom & Drag to Pan)
+        let touchStartDist = 0;
+        let initialZoom = 1;
+        img.addEventListener('touchstart', (e) => {
+            if (e.touches.length === 1 && currentZoom > 1) {
+                isPanning = true;
+                startPanX = e.touches[0].clientX - panX;
+                startPanY = e.touches[0].clientY - panY;
+            } else if (e.touches.length === 2) {
+                isPanning = false;
+                touchStartDist = Math.hypot(
+                    e.touches[0].clientX - e.touches[1].clientX,
+                    e.touches[0].clientY - e.touches[1].clientY
+                );
+                initialZoom = currentZoom;
+            }
+        }, { passive: true });
+
+        img.addEventListener('touchmove', (e) => {
+            if (isPanning && e.touches.length === 1) {
+                panX = e.touches[0].clientX - startPanX;
+                panY = e.touches[0].clientY - startPanY;
+                applyZoom(img, false);
+            } else if (e.touches.length === 2 && touchStartDist > 0) {
+                const dist = Math.hypot(
+                    e.touches[0].clientX - e.touches[1].clientX,
+                    e.touches[0].clientY - e.touches[1].clientY
+                );
+                const scaleFactor = dist / touchStartDist;
+                currentZoom = Math.min(Math.max(Math.round(initialZoom * scaleFactor * 100) / 100, MIN_ZOOM), MAX_ZOOM);
+                applyZoom(img, false);
+            }
+        }, { passive: true });
+
+        img.addEventListener('touchend', () => {
+            isPanning = false;
+            touchStartDist = 0;
+            if (currentZoom <= 1) {
+                panX = 0;
+                panY = 0;
+            }
+            applyZoom(img, true);
+        });
+
         // Trigger fade in animation
         setTimeout(() => img.classList.add('active'), 10);
         
@@ -214,14 +360,14 @@ async function openPreview(fileName, fileUrl) {
         // Floating Overlay Navigation Arrows for Images
         if (imagePlaylist.length > 1) {
             const prevArrow = document.createElement('div');
-            prevArrow.className = 'preview-nav-arrow prev';
-            prevArrow.innerHTML = '‹';
+            prevArrow.className = 'preview-nav-arrow prev premium-nav-arrow';
+            prevArrow.innerHTML = '<svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>';
             prevArrow.title = 'Previous Image (←)';
             prevArrow.onclick = (e) => { e.stopPropagation(); prevImage(); };
 
             const nextArrow = document.createElement('div');
-            nextArrow.className = 'preview-nav-arrow next';
-            nextArrow.innerHTML = '›';
+            nextArrow.className = 'preview-nav-arrow next premium-nav-arrow';
+            nextArrow.innerHTML = '<svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>';
             nextArrow.title = 'Next Image (→)';
             nextArrow.onclick = (e) => { e.stopPropagation(); nextImage(); };
 
@@ -230,6 +376,8 @@ async function openPreview(fileName, fileUrl) {
         }
     } else {
         body.classList.remove('image-mode');
+        if (zoomControls) zoomControls.style.display = 'none';
+        if (zoomDivider) zoomDivider.style.display = 'none';
         const exifOverlay = document.getElementById('exifOverlay');
         if (exifOverlay) exifOverlay.style.display = 'none';
 
@@ -256,16 +404,29 @@ async function openPreview(fileName, fileUrl) {
                 if (!resp.ok) throw new Error('Failed to load file');
                 const text = await resp.text();
 
-                const container = document.createElement('div');
-                container.className = 'code-preview-container';
-                const pre = document.createElement('pre');
-                pre.className = 'code-preview';
-                const code = document.createElement('code');
-                code.textContent = text.length > 500000 ? text.substring(0, 500000) + '\n... [File truncated]' : text;
-                pre.appendChild(code);
-                container.appendChild(pre);
-                body.innerHTML = '';
-                body.appendChild(container);
+                if (ext === 'md' && typeof marked !== 'undefined') {
+                    const container = document.createElement('div');
+                    container.className = 'markdown-preview';
+                    container.style.padding = '2rem';
+                    container.style.color = 'var(--text-color)';
+                    container.style.lineHeight = '1.6';
+                    container.style.maxWidth = '800px';
+                    container.style.margin = '0 auto';
+                    container.innerHTML = marked.parse(text);
+                    body.innerHTML = '';
+                    body.appendChild(container);
+                } else {
+                    const container = document.createElement('div');
+                    container.className = 'code-preview-container';
+                    const pre = document.createElement('pre');
+                    pre.className = 'code-preview';
+                    const code = document.createElement('code');
+                    code.textContent = text.length > 500000 ? text.substring(0, 500000) + '\n... [File truncated]' : text;
+                    pre.appendChild(code);
+                    container.appendChild(pre);
+                    body.innerHTML = '';
+                    body.appendChild(container);
+                }
             } catch (e) {
                 body.innerHTML = `<div style="padding: 2rem; color: var(--danger-color);">Error loading preview: ${escapeHtml(e.message)}</div>`;
             }
@@ -317,7 +478,10 @@ function toggleSlideshowPlay() {
     } else {
         isSlideshowPlaying = true;
         document.body.classList.add('slideshow-playing');
-        if (playBtn) playBtn.textContent = '⏸ Pause';
+        if (playBtn) {
+            playBtn.innerHTML = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="4" height="16" x="6" y="4"/><rect width="4" height="16" x="14" y="4"/></svg>';
+            playBtn.title = 'Pause (Space)';
+        }
         slideshowTimer = setInterval(() => {
             nextImage();
         }, getSlideshowSpeed());
@@ -332,7 +496,10 @@ function stopSlideshow() {
     isSlideshowPlaying = false;
     document.body.classList.remove('slideshow-playing');
     const playBtn = document.getElementById('slideshowPlayBtn');
-    if (playBtn) playBtn.textContent = '▶ Play';
+    if (playBtn) {
+        playBtn.innerHTML = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>';
+        playBtn.title = 'Auto Play (Space)';
+    }
 }
 
 function toggleFullscreenPreview() {
@@ -387,6 +554,16 @@ async function quickDeleteCurrentImage() {
     }
 }
 
+function closeModalAnimated(modal, onClosed) {
+    if (!modal || modal.style.display === 'none') return;
+    modal.classList.add('modal-closing');
+    setTimeout(() => {
+        modal.style.display = 'none';
+        modal.classList.remove('modal-closing');
+        if (onClosed) onClosed();
+    }, 180);
+}
+
 function closePreview() {
     stopSlideshow();
     const modal = document.getElementById('previewModal');
@@ -394,13 +571,15 @@ function closePreview() {
     if (document.fullscreenElement) {
         document.exitFullscreen().catch(() => {});
     }
-    if (body) {
-        body.innerHTML = '';
-        body.classList.remove('image-mode');
-    }
-    if (modal) modal.style.display = 'none';
     const exifOverlay = document.getElementById('exifOverlay');
     if (exifOverlay) exifOverlay.style.display = 'none';
+
+    closeModalAnimated(modal, () => {
+        if (body) {
+            body.innerHTML = '';
+            body.classList.remove('image-mode');
+        }
+    });
 }
 
 // Global Keyboard Navigation for Slideshow
@@ -425,6 +604,32 @@ document.addEventListener('keydown', (e) => {
     } else if (e.key === 'Delete') {
         e.preventDefault();
         quickDeleteCurrentImage();
+    } else if (e.key === '+' || e.key === '=') {
+        e.preventDefault();
+        zoomIn();
+    } else if (e.key === '-' || e.key === '_') {
+        e.preventDefault();
+        zoomOut();
+    } else if (e.key === '0') {
+        e.preventDefault();
+        resetZoom();
+    }
+});
+
+// Global Panning Listeners
+window.addEventListener('mousemove', (e) => {
+    if (!isPanning) return;
+    panX = e.clientX - startPanX;
+    panY = e.clientY - startPanY;
+    applyZoom(null, false);
+});
+
+window.addEventListener('mouseup', () => {
+    if (isPanning) {
+        isPanning = false;
+        const img = document.querySelector('.modal-body img.slideshow-image');
+        if (img) img.classList.remove('grabbing');
+        applyZoom(null, true);
     }
 });
 
@@ -468,8 +673,9 @@ async function openMoveModal(fileName) {
 
 function closeMoveModal() {
     const modal = document.getElementById('moveModal');
-    if (modal) modal.style.display = 'none';
-    movingFileName = '';
+    closeModalAnimated(modal, () => {
+        movingFileName = '';
+    });
 }
 
 async function loadMoveFolders() {
@@ -695,7 +901,7 @@ function openMkdirModal() {
 
 function closeMkdirModal() {
     const modal = document.getElementById('mkdirModal');
-    if (modal) modal.style.display = 'none';
+    closeModalAnimated(modal);
 }
 
 async function createFolder() {
@@ -784,6 +990,24 @@ document.addEventListener('DOMContentLoaded', () => {
     fetchSystemInfo();
     fetchFiles();
 
+    const previewBody = document.getElementById('previewBody');
+    if (previewBody) {
+        previewBody.addEventListener('wheel', (e) => {
+            if (!previewBody.classList.contains('image-mode')) return;
+            e.preventDefault();
+            const delta = e.deltaY < 0 ? ZOOM_STEP : -ZOOM_STEP;
+            const newZoom = Math.min(Math.max(Math.round((currentZoom + delta) * 100) / 100, MIN_ZOOM), MAX_ZOOM);
+            if (newZoom !== currentZoom) {
+                currentZoom = newZoom;
+                if (currentZoom <= 1) {
+                    panX = 0;
+                    panY = 0;
+                }
+                applyZoom();
+            }
+        }, { passive: false });
+    }
+
     const fileInput = document.getElementById('fileInput');
     fileInput.addEventListener('change', handleFileUpload);
 
@@ -821,12 +1045,14 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 });
 
+let showHiddenFiles = false;
+
 async function fetchFiles() {
     try {
         const tbody = document.getElementById('fileListBody');
         tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding: 2rem;">Loading files...</td></tr>';
 
-        const response = await fetch('/api/files?path=' + encodeURIComponent(currentPath));
+        const response = await fetch(`/api/files?path=${encodeURIComponent(currentPath)}&showHidden=${showHiddenFiles}`);
         if (!response.ok) throw new Error('Failed to fetch files');
         const files = await response.json();
         currentFiles = files;
@@ -963,6 +1189,9 @@ function renderFiles(files) {
                     <td>${formatDate(file.lastModified)}</td>
                     <td class="action-links">
                         ${isProtected ? '' : `<button class="btn-action move-btn" onclick="openMoveModal('${escapedName}')">📦 Move</button>`}
+                        ${isProtected ? '' : `<a href="/api/download-zip?path=${encodeURIComponent(currentPath)}&name=${encodeURIComponent(file.name)}" class="download-btn" download>⬇ ZIP</a>`}
+                        <button class="btn-action copy-btn" onclick="showQr('${escapedName}', true)" title="Share QR">📱 QR</button>
+
                         ${isProtected ? '' : `<button class="btn-action delete-btn" onclick="deleteItem('${escapedName}')">🗑️ Delete</button>`}
                     </td>
                 `;
@@ -980,6 +1209,8 @@ function renderFiles(files) {
                     <td class="action-links">
                         ${isMedia ? `<button class="btn-action view-btn" onclick="openPreview('${escapedName}', '${fileUrl}')">👁️ View</button>` : `<a href="${fileUrl}" target="_blank" class="btn-action view-btn">👁️ View</a>`}
                         <button class="btn-action copy-btn" onclick="copyLink('${fileUrl}', '${escapedName}')" title="Copy Link">🔗 Link</button>
+                        <button class="btn-action copy-btn" onclick="showQr('${escapedName}', false)" title="Share QR">📱 QR</button>
+
                         <button class="btn-action move-btn" onclick="openMoveModal('${escapedName}')">📦 Move</button>
                         <a href="${fileUrl}" class="download-btn" download>⬇ Download</a>
                         <button class="btn-action delete-btn" onclick="deleteItem('${escapedName}')">🗑️ Delete</button>
@@ -1009,6 +1240,9 @@ function renderFiles(files) {
                     <div class="grid-meta">${formatDate(file.lastModified)}</div>
                     <div class="grid-actions">
                         ${isProtected ? '' : `<button class="btn-action move-btn" onclick="openMoveModal('${escapedName}')" title="Move">📦</button>`}
+                        ${isProtected ? '' : `<a href="/api/download-zip?path=${encodeURIComponent(currentPath)}&name=${encodeURIComponent(file.name)}" class="download-btn" download title="Download ZIP">⬇</a>`}
+                        <button class="btn-action copy-btn" onclick="showQr('${escapedName}', true)" title="Share QR">📱</button>
+
                         ${isProtected ? '' : `<button class="btn-action delete-btn" onclick="deleteItem('${escapedName}')" title="Delete">🗑️</button>`}
                     </div>
                 `;
@@ -1024,6 +1258,8 @@ function renderFiles(files) {
                         ${isMedia ? `<button class="btn-action view-btn" onclick="openPreview('${escapedName}', '${fileUrl}')" title="View">👁️</button>` : `<a href="${fileUrl}" target="_blank" class="btn-action view-btn" title="View">👁️</a>`}
                         <button class="btn-action copy-btn" onclick="copyLink('${fileUrl}', '${escapedName}')" title="Copy Link">🔗</button>
                         <button class="btn-action move-btn" onclick="openMoveModal('${escapedName}')" title="Move">📦</button>
+                        <button class="btn-action copy-btn" onclick="showQr('${escapedName}', false)" title="Share QR">📱</button>
+
                         <a href="${fileUrl}" class="download-btn" download title="Download">⬇</a>
                         <button class="btn-action delete-btn" onclick="deleteItem('${escapedName}')" title="Delete">🗑️</button>
                     </div>
@@ -1157,3 +1393,60 @@ function updateBreadcrumb() {
         });
     }
 }
+
+function toggleTheme() {
+    const isLight = document.body.classList.toggle('light-theme');
+    const btn = document.getElementById('themeToggleBtn');
+    if (btn) btn.textContent = isLight ? '🌙' : '☀️';
+    localStorage.setItem('webfs-theme', isLight ? 'light' : 'dark');
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    if (localStorage.getItem('webfs-theme') === 'light') {
+        document.body.classList.add('light-theme');
+        const btn = document.getElementById('themeToggleBtn');
+        if (btn) btn.textContent = '🌙';
+    }
+});
+
+function batchDownloadZip() {
+    const selected = getSelectedFiles();
+    if (selected.length === 0) {
+        showToast('No items selected for download.', 'info');
+        return;
+    }
+    const namesList = selected.map(f => f.name).join(',');
+    const url = `/api/download-zip?path=${encodeURIComponent(currentPath)}&names=${encodeURIComponent(namesList)}`;
+    
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'archive.zip';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    
+    clearSelection();
+}
+
+function showQr(name, isFolder) {
+    const qrModal = document.getElementById('qrModal');
+    const qrImage = document.getElementById('qrImage');
+    const qrFileName = document.getElementById('qrFileName');
+    
+    qrFileName.textContent = 'Share ' + name;
+    
+    const qrUrl = `/api/qr?path=${encodeURIComponent(currentPath)}&name=${encodeURIComponent(name)}&isFolder=${isFolder}&_t=${new Date().getTime()}`;
+    qrImage.src = qrUrl;
+    
+    qrModal.style.display = 'flex';
+}
+
+function closeQrModal() {
+    const modal = document.getElementById('qrModal');
+    closeModalAnimated(modal);
+}
+
+document.addEventListener('click', (e) => {
+    const qrModal = document.getElementById('qrModal');
+    if (e.target === qrModal) closeQrModal();
+});

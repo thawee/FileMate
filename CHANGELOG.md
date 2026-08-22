@@ -4,6 +4,40 @@ All notable changes to the **Shared Server** Android Application and Web Fronten
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to Semantic Versioning.
 
+## [1.6.0] - 2026-08-22
+
+### 🚀 Added
+- **Interactive Web UI Image Preview Zoom & Pan:**
+  - Added dedicated zoom toolbar controls (`+`, `−`, and interactive percentage indicator badge `100%`).
+  - Added multi-gesture support: double-click / double-tap to toggle zoom ($1\times \leftrightarrow 2.5\times$), mouse scroll-wheel / trackpad pinch zoom, and fluid touch pinch-to-zoom for mobile/tablets.
+  - Implemented freeform click-and-drag panning with dynamic `grab`/`grabbing` cursor states when zoomed in ($> 1\times$).
+  - Added keyboard shortcuts for zoom navigation: <kbd>+</kbd> / <kbd>=</kbd> to Zoom In, <kbd>-</kbd> / <kbd>_</kbd> to Zoom Out, and <kbd>0</kbd> to Reset Zoom.
+  - Added automatic state resets on slide change, playlist progression, or modal dismissal.
+- **Web UI Toolbar Sort Selector & UX Refinements:**
+  - Added a persistent sort selector dropdown in the header toolbar synced two-way with table header columns and Grid Mode.
+  - Optimized grid cards with $34\text{px}+$ comfortable touch targets and wrapping action buttons.
+  - Added responsive mobile viewport layout (< 768px) with intelligent column reduction and flexible search box.
+  - Added smooth exit transition animations (`.modal-closing`) across all modal dialogs.
+  - Standardized ARIA accessibility (`aria-label`, `role="button"`) and visible focus states (`:focus-visible`).
+- **Android Native UI/UX Overhaul (Jetpack Compose & Material 3):**
+  - Added `BackHandler` predictive back navigation in `FileBrowserScreen` to smoothly traverse directory hierarchies before app exit.
+  - Implemented responsive adaptive grid (`GridCells.Adaptive(minSize = 130.dp)`) for tablets, foldables, and landscape mode.
+  - Added double-tap zoom ($1\times \leftrightarrow 2.5\times$) with pan boundary clamping in native `PreviewScreen`.
+  - Added external media launcher and playback overlay delegating video/audio files to `Intent.ACTION_VIEW` via FileProvider.
+  - Added unsaved changes safeguard confirmation dialog in `TextEditorScreen`.
+  - Added dynamic bottom content insets when floating mini-player bar is active.
+  - Unified theme styling with Indigo/Slate Material 3 palette.
+
+---
+
+## [1.5.0] - 2026-08-20
+
+### 🐛 Fixed
+- **Slideshow Pager Syncing Issue:**
+  - Fixed an issue in `PreviewScreen` and `PremiumSlideshowScreen` where swiping the image pager manually was abruptly interrupted and stuck displaying half of two images. The global casting state now syncs via `settledPage` to avoid feedback loops with programmatic scroll animations.
+- **AirPlay Casting Protocol:**
+  - Added required `User-Agent: MediaControl/1.0` and `X-Apple-Session-ID` headers to the AirPlay HTTP PUT `/photo` and `/stop` endpoints to fix casting compatibility with Apple TV boxes.
+
 ---
 
 ## [1.4.0] - 2026-08-15
