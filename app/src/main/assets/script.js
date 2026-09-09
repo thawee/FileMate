@@ -982,9 +982,24 @@ document.addEventListener('click', (e) => {
 
     const toolsModal = document.getElementById('toolsModal');
     if (e.target === toolsModal) closeToolsModal();
+
+    if (e.target.closest('.card-menu-dropdown button')) {
+        document.querySelectorAll('.card-menu-dropdown.show').forEach(d => d.classList.remove('show'));
+    } else if (!e.target.closest('.card-menu-wrapper')) {
+        document.querySelectorAll('.card-menu-dropdown.show').forEach(d => d.classList.remove('show'));
+    }
 });
 
-
+function toggleCardMenu(event, btn) {
+    event.stopPropagation();
+    const dropdown = btn.nextElementSibling;
+    if (!dropdown) return;
+    const isVisible = dropdown.classList.contains('show');
+    document.querySelectorAll('.card-menu-dropdown.show').forEach(d => {
+        if (d !== dropdown) d.classList.remove('show');
+    });
+    dropdown.classList.toggle('show', !isVisible);
+}
 
 document.addEventListener('DOMContentLoaded', () => {
     fetchSystemInfo();
@@ -1019,6 +1034,10 @@ document.addEventListener('DOMContentLoaded', () => {
     window.addEventListener('dragenter', (e) => {
         e.preventDefault();
         dragCounter++;
+        const dest = document.getElementById('dragDestinationText');
+        if (dest) {
+            dest.textContent = `Uploading to: /${currentPath || 'Root'}`;
+        }
         dragOverlay.style.display = 'flex';
     });
 
@@ -1236,32 +1255,43 @@ function renderFiles(files) {
                     <div class="grid-preview" onclick="navigateTo('${escapedName}')" style="cursor: pointer;">
                         ${previewContent}
                     </div>
-                    <div class="grid-name" title="${escapeHtml(file.name)}">${escapeHtml(file.name)}</div>
+                    <div class="grid-name" title="${escapeHtml(file.name)}" onclick="navigateTo('${escapedName}')" style="cursor: pointer;">${escapeHtml(file.name)}</div>
                     <div class="grid-meta">${formatDate(file.lastModified)}</div>
                     <div class="grid-actions">
-                        ${isProtected ? '' : `<button class="btn-action move-btn" onclick="openMoveModal('${escapedName}')" title="Move">📦</button>`}
-                        ${isProtected ? '' : `<a href="/api/download-zip?path=${encodeURIComponent(currentPath)}&name=${encodeURIComponent(file.name)}" class="download-btn" download title="Download ZIP">⬇</a>`}
-                        <button class="btn-action copy-btn" onclick="showQr('${escapedName}', true)" title="Share QR">📱</button>
-
-                        ${isProtected ? '' : `<button class="btn-action delete-btn" onclick="deleteItem('${escapedName}')" title="Delete">🗑️</button>`}
+                        ${isProtected ? `<button onclick="navigateTo('${escapedName}')" class="btn-action grid-main-btn" title="Open Folder"><span>📁</span> Open</button>` : `<a href="/api/download-zip?path=${encodeURIComponent(currentPath)}&name=${encodeURIComponent(file.name)}" class="download-btn grid-main-btn" download title="Download ZIP"><span>⬇</span> ZIP</a>`}
+                        <div class="card-menu-wrapper">
+                            <button class="btn-action card-menu-btn" onclick="toggleCardMenu(event, this)" aria-label="More options" title="More options">•••</button>
+                            <div class="card-menu-dropdown">
+                                <button onclick="navigateTo('${escapedName}')"><span>📁</span> Open Folder</button>
+                                <button onclick="showQr('${escapedName}', true)"><span>📱</span> Share QR</button>
+                                ${isProtected ? '' : `<button onclick="openMoveModal('${escapedName}')"><span>📦</span> Move / Rename</button>`}
+                                ${isProtected ? '' : `<button class="menu-delete" onclick="deleteItem('${escapedName}')"><span>🗑️</span> Delete</button>`}
+                            </div>
+                        </div>
                     </div>
                 `;
             } else {
                 card.innerHTML = `
                     ${gridCheckbox}
-                    <div class="grid-preview ${isMedia ? 'clickable' : ''}" ${isMedia ? `onclick="openPreview('${escapedName}', '${fileUrl}')"` : ''} style="${isMedia ? 'cursor: pointer;' : ''}">
+                    <div class="grid-preview ${isMedia ? 'clickable' : ''}" onclick="${isMedia ? `openPreview('${escapedName}', '${fileUrl}')` : `window.open('${fileUrl}', '_blank')`}" style="cursor: pointer;">
                         ${previewContent}
                     </div>
-                    <div class="grid-name" title="${escapeHtml(file.name)}">${escapeHtml(file.name)}</div>
+                    <div class="grid-name" title="${escapeHtml(file.name)}" onclick="${isMedia ? `openPreview('${escapedName}', '${fileUrl}')` : `window.open('${fileUrl}', '_blank')`}" style="cursor: pointer;">${escapeHtml(file.name)}</div>
                     <div class="grid-meta">${formatBytes(file.size)}</div>
                     <div class="grid-actions">
-                        ${isMedia ? `<button class="btn-action view-btn" onclick="openPreview('${escapedName}', '${fileUrl}')" title="View">👁️</button>` : `<a href="${fileUrl}" target="_blank" class="btn-action view-btn" title="View">👁️</a>`}
-                        <button class="btn-action copy-btn" onclick="copyLink('${fileUrl}', '${escapedName}')" title="Copy Link">🔗</button>
-                        <button class="btn-action move-btn" onclick="openMoveModal('${escapedName}')" title="Move">📦</button>
-                        <button class="btn-action copy-btn" onclick="showQr('${escapedName}', false)" title="Share QR">📱</button>
-
-                        <a href="${fileUrl}" class="download-btn" download title="Download">⬇</a>
-                        <button class="btn-action delete-btn" onclick="deleteItem('${escapedName}')" title="Delete">🗑️</button>
+                        <a href="${fileUrl}" class="download-btn grid-main-btn" download title="Download file">
+                            <span>⬇</span> Download
+                        </a>
+                        <div class="card-menu-wrapper">
+                            <button class="btn-action card-menu-btn" onclick="toggleCardMenu(event, this)" aria-label="More options" title="More options">•••</button>
+                            <div class="card-menu-dropdown">
+                                ${isMedia ? `<button onclick="openPreview('${escapedName}', '${fileUrl}')"><span>👁️</span> Preview</button>` : `<button onclick="window.open('${fileUrl}', '_blank')"><span>👁️</span> View</button>`}
+                                <button onclick="copyLink('${fileUrl}', '${escapedName}')"><span>🔗</span> Copy Link</button>
+                                <button onclick="showQr('${escapedName}', false)"><span>📱</span> Share QR</button>
+                                <button onclick="openMoveModal('${escapedName}')"><span>📦</span> Move / Rename</button>
+                                <button class="menu-delete" onclick="deleteItem('${escapedName}')"><span>🗑️</span> Delete</button>
+                            </div>
+                        </div>
                     </div>
                 `;
             }

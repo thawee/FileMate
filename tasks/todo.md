@@ -1,30 +1,31 @@
-# File Mate Rebranding Plan
+# File Mate UX & Functional Enhancement Plan
 
-## 1. Android App Resources & Launcher Icon
-- [x] Update `app_name` in `app/src/main/res/values/strings.xml` to `File Mate`.
-- [x] Replace `app/src/main/res/drawable/ic_launcher_foreground.xml` with Electric Indigo Wi-Fi folder vector.
-- [x] Update `app/src/main/res/drawable/ic_launcher_background.xml` with `#0F172A` Midnight Slate.
+## 1. Web Grid Mode: Card Decluttering & Progressive Disclosure
+- [x] Refactor `.grid-card .grid-actions` in `script.js` and `style.css` to use progressive disclosure:
+  - Primary button: Quick Download (`⬇️ Download` / `⬇️ ZIP` / `📁 Open`).
+  - Secondary button: Sleek `•••` More Menu button.
+  - Dropdown Menu: Clean glassmorphic popover with `Preview / View`, `Copy Link`, `Share QR`, `Move / Rename`, and `Delete`.
+- [x] Ensure click on image/media opens preview directly, and click on directory navigates directly.
+- [x] Add auto-dismiss on outside click or menu option selection.
 
-## 2. Android Kotlin UI & Foreground Service
-- [x] Update `FileServerService.kt` notification channel name and notification title to `File Mate`.
-- [x] Update `MainActivity.kt` TopAppBar title and card titles from `WebFS` / `Shared Server` to `File Mate`.
-- [x] Update `Theme.kt` and `Color.kt` to ensure Electric Indigo (`#6366F1`) and Cyber Cyan (`#38BDF8`) theme tokens align.
+## 2. Web Drag-and-Drop Visual Polish
+- [x] Upgrade `#dragOverlay` in `index.html`, `style.css`, and `script.js` with:
+  - Dynamic destination path indicator ("Uploading to: /...").
+  - Animated Electric Indigo to Cyber Cyan pulsing dashed border and frosted glass backdrop.
 
-## 3. Web Dashboard Assets
-- [x] Update `<title>` in `app/src/main/assets/index.html` to `File Mate`.
-- [x] Update header titles and branding in `app/src/main/assets/index.html`.
-- [x] Update `style.css` with Electric Indigo primary color tokens (`#6366F1` / `#4F46E5`).
+## 3. Android First-Run Permission Onboarding
+- [x] Add explanatory Material 3 `AlertDialog` in `MainActivity.kt` before requesting `MANAGE_APP_ALL_FILES_ACCESS_PERMISSION`.
+  - Explains the local Wi-Fi hosting & junk cleanup benefits with clear privacy assurances.
 
-## 4. Documentation & Changelog
-- [x] Update `README.md` to reflect `File Mate`.
-- [x] Add entry to `CHANGELOG.md`.
-
-## 5. Verification & Testing
-- [x] Run `./gradlew compileDebugKotlin` to verify compilation.
-- [x] Run `./gradlew test` to ensure security and helper unit tests pass.
+## 4. Verification & Testing
+- [x] Verify web dashboard interactions (More menu, download, QR, move, delete).
+- [x] Verify Android compilation and run unit test suite (`./gradlew test`).
+- [x] Deploy updated APK to connected device (`adb install -r`).
 
 ## Review & Summary
-- Successfully rebranded the application to **File Mate**, integrating it with the **Mate Series** alongside **Music Mate**, **Trip Mate**, and **Trading Mate**.
-- Implemented the **Electric Indigo** visual identity across the Android app launcher icon, Material 3 Jetpack Compose theme, web assets, and notification channels.
-- Verified build integrity with successful Kotlin compilation and clean execution of all unit tests.
+- **Grid Card Ergonomics:** Reduced 6 cluttered buttons per card down to a single high-priority primary action button and an unobtrusive `•••` dropdown menu. This dramatically simplifies the UI when browsing large directories while retaining full 1-click access to all operations.
+- **Visual Drag Feedback:** When dragging files into the browser, users now see the exact upload folder destination path and an animated Electric Indigo/Cyber Cyan border pulse.
+- **Empathetic Onboarding:** Replaced abrupt Android system settings redirection with a clear Material 3 rationale dialog guaranteeing 100% local Wi-Fi privacy.
+- **Fully Verified:** Compilation (`compileDebugKotlin`), unit test suite (`test`), APK build (`assembleDebug`), and device installation (`adb install -r`) all executed cleanly.
+
 

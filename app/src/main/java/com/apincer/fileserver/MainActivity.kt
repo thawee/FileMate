@@ -407,15 +407,14 @@ fun HostAndToolsContent(onClose: () -> Unit) {
         }
     }
 
+    var showPermissionRationale by remember { mutableStateOf(false) }
+
     fun requestAllFilesAccessAndStart() {
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
             if (Environment.isExternalStorageManager()) {
                 startServer()
             } else {
-                val intent = Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION).apply {
-                    data = Uri.parse("package:${context.packageName}")
-                }
-                manageStorageLauncher.launch(intent)
+                showPermissionRationale = true
             }
         } else {
             startServer()
@@ -1165,6 +1164,68 @@ fun HostAndToolsContent(onClose: () -> Unit) {
             confirmButton = {
                 Button(onClick = { showResultDialog = false }) {
                     Text("Done")
+                }
+            }
+        )
+    }
+
+    // Storage Permission Onboarding Rationale Dialog
+    if (showPermissionRationale) {
+        AlertDialog(
+            onDismissRequest = { showPermissionRationale = false },
+            icon = {
+                Icon(
+                    imageVector = Icons.Default.Info,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(32.dp)
+                )
+            },
+            title = {
+                Text(
+                    text = "Storage Access Required",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+            },
+            text = {
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    Text(
+                        text = "File Mate turns your device into a high-speed local file server. To host, share, and manage files over Wi-Fi and perform storage cleanups, File Mate requires All Files Access.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(
+                            text = "🔒 Privacy Guarantee: All file sharing and maintenance occur 100% locally on your Wi-Fi network. No external servers or cloud uploads.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(10.dp)
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showPermissionRationale = false
+                        val intent = Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION).apply {
+                            data = Uri.parse("package:${context.packageName}")
+                        }
+                        manageStorageLauncher.launch(intent)
+                    }
+                ) {
+                    Text("Continue to Settings")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showPermissionRationale = false }) {
+                    Text("Not Now")
                 }
             }
         )

@@ -14,15 +14,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   - Updated foreground service notification channel and status indicators to **File Mate Running**.
 
 ### 🌐 Web Dashboard Refinements
+- **Grid View Progressive Disclosure:**
+  - Decluttered grid cards by replacing competing 6-button rows with a clean primary action (`⬇ Download` / `⬇ ZIP`) and a sleek `•••` More Menu.
+  - Added glassmorphic dropdown popovers for secondary actions: *Preview / View*, *Copy Link*, *Share QR*, *Move / Rename*, and *Delete*.
+  - Enhanced direct interaction: clicking preview thumbnails or file/folder titles immediately opens or navigates to the item.
+  - Added smart auto-dismiss for open dropdown menus when clicking outside or selecting an action.
+- **Drag-and-Drop Visual Polish:**
+  - Upgraded `#dragOverlay` with real-time dynamic destination indicator (`Uploading to: /<path>`).
+  - Added pulsing Electric Indigo to Cyber Cyan animated border and frosted glass backdrop effect.
 - **Favicon & Branding:**
   - Added embedded SVG favicon to browser tabs matching the Electric Indigo File Mate icon.
   - Updated title and navbar header branding to **📁 File Mate**.
   - Aligned primary CSS theme variables to Electric Indigo (`#6366F1` / `#4F46E5`).
-- **Grid View UX & Ergonomics:**
-  - Reorganized card action buttons into a symmetrical, single-row layout with flexible widths.
-  - Added frosted glass backdrop badge (`rgba(15, 23, 42, 0.65)`) behind card checkboxes to ensure high contrast against white screenshots and documents.
 
 ### 📱 Android Native Experience
+- **Permission Onboarding Rationale:**
+  - Replaced immediate, abrupt system settings redirect with an empathetic Material 3 `AlertDialog` explaining the necessity of All Files Access for Wi-Fi file sharing and junk cleanup.
+  - Highlighted clear local privacy guarantee: 100% on-device Wi-Fi operation with zero cloud dependencies or external analytics.
 - **Layout & Inset Protections:**
   - Added `.statusBarsPadding()` to the server dashboard screen to prevent status bar and camera notch overlap on edge-to-edge displays.
   - Renamed network stats label to `File Server`.
