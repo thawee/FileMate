@@ -1,8 +1,32 @@
-# 📦 Shared Server Changelog
+# 📦 File Mate Changelog
 
-All notable changes to the **Shared Server** Android Application and Web Frontend file server project will be documented in this file.
+All notable changes to the **File Mate** Android Application and Web Frontend file server project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to Semantic Versioning.
+
+## [2.0.0] - 2026-09-09
+
+### 🎨 Rebranding & Ecosystem Integration
+- **Mate Series Official Rebrand:**
+  - Rebranded application from *Shared Server* / *WebFS* to **File Mate**, harmonizing with *Music Mate*, *Trip Mate*, and *Trading Mate*.
+  - Adopted **Electric Indigo** (`#6366F1`) & **Cyber Cyan** (`#38BDF8`) brand theme palette.
+  - Deployed upgraded modern adaptive launcher icon featuring a rich gradient background (`#4F46E5` &rarr; `#312E81` &rarr; `#1E1B4B`), bold Cyber Cyan Wi-Fi broadcast waves, and the signature white **"M"** monogram.
+  - Updated foreground service notification channel and status indicators to **File Mate Running**.
+
+### 🌐 Web Dashboard Refinements
+- **Favicon & Branding:**
+  - Added embedded SVG favicon to browser tabs matching the Electric Indigo File Mate icon.
+  - Updated title and navbar header branding to **📁 File Mate**.
+  - Aligned primary CSS theme variables to Electric Indigo (`#6366F1` / `#4F46E5`).
+- **Grid View UX & Ergonomics:**
+  - Reorganized card action buttons into a symmetrical, single-row layout with flexible widths.
+  - Added frosted glass backdrop badge (`rgba(15, 23, 42, 0.65)`) behind card checkboxes to ensure high contrast against white screenshots and documents.
+
+### 📱 Android Native Experience
+- **Layout & Inset Protections:**
+  - Added `.statusBarsPadding()` to the server dashboard screen to prevent status bar and camera notch overlap on edge-to-edge displays.
+  - Renamed network stats label to `File Server`.
+  - Bumped version to `2.0.0` (`versionCode 7`).
 
 ## [1.6.0] - 2026-08-22
 

@@ -1,4 +1,4 @@
-# 📡 Shared Server: Android Local File Server & Storage Maintenance Suite
+# 📁 File Mate: Android Local File Server & Storage Maintenance Suite
 
 [![Android](https://img.shields.io/badge/Platform-Android_7.0%2B-brightgreen.svg)](https://developer.android.com)
 [![Kotlin](https://img.shields.io/badge/Language-Kotlin-blue.svg)](https://kotlinlang.org/)
@@ -7,9 +7,9 @@
 [![Build](https://img.shields.io/badge/Build-Gradle_9.5-025E8D.svg)](build.gradle.kts)
 [![License](https://img.shields.io/badge/License-MIT-lightgrey.svg)](LICENSE)
 
-**Shared Server** is a lightweight, high-performance Android application that converts your mobile device into a local HTTP File Server with an interactive Web Dashboard and native storage maintenance tools. 
+**File Mate** is a lightweight, high-performance Android application that converts your mobile device into a local HTTP File Server with an interactive Web Dashboard and native storage maintenance tools. Part of the **Mate Series** ecosystem (`Music Mate`, `Trip Mate`, `Trading Mate`, `File Mate`).
 
-Whether you need to transfer large files wirelessly across your local network, view photo slideshows, edit/read code files, clean up OS junk files (`.DS_Store`, `Thumbs.db`, `desktop.ini`), or remove empty directories, **Shared Server** provides a complete solution with zero third-party cloud dependencies.
+Whether you need to transfer large files wirelessly across your local network, view photo slideshows, edit/read code files, clean up OS junk files (`.DS_Store`, `Thumbs.db`, `desktop.ini`), or remove empty directories, **File Mate** provides a complete solution with zero third-party cloud dependencies.
 
 ---
 
@@ -68,10 +68,10 @@ Whether you need to transfer large files wirelessly across your local network, v
 
 ## 🏗️ Architecture & Project Structure
 
-**Shared Server** is organized into a modular Android app directory structure:
+**File Mate** is organized into a modular Android app directory structure:
 
 ```
-SharedServer/
+FileMate/
 ├── app/
 │   ├── src/
 │   │   ├── main/
@@ -104,7 +104,7 @@ SharedServer/
 
 ## 🔌 HTTP API Specifications
 
-Shared Server exposes a set of RESTful HTTP endpoints for remote management:
+File Mate exposes a set of RESTful HTTP endpoints for remote management:
 
 | Endpoint | Method | Description | Query / Body Parameters |
 | :--- | :---: | :--- | :--- |
@@ -156,7 +156,7 @@ Shared Server exposes a set of RESTful HTTP endpoints for remote management:
 ## 📱 How to Use
 
 ### 1. Launch Server on Android
-1. Open the **Shared Server** app on your Android device.
+1. Open the **File Mate** app on your Android device.
 2. Grant storage permissions if prompted (`All Files Access` or `Storage Permission`).
 3. Tap **Start Server**.
 4. The status indicator will glow green, showing your local IP address (e.g., `http://192.168.1.100:8080`).
@@ -174,7 +174,7 @@ Shared Server exposes a set of RESTful HTTP endpoints for remote management:
 
 ## 🧪 Testing & Verification
 
-Shared Server includes comprehensive unit tests verifying security boundary constraints, path sanitization, and junk file identification:
+File Mate includes comprehensive unit tests verifying security boundary constraints, path sanitization, and junk file identification:
 
 ```bash
 ./gradlew test

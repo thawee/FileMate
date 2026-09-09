@@ -13,12 +13,12 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.graphics.Color
 
 private val DarkColorScheme = darkColorScheme(
-    primary = Color(0xFF6366F1),
-    secondary = Color(0xFFEC4899),
-    tertiary = Color(0xFF38BDF8),
-    background = Color(0xFF0F172A),
-    surface = Color(0xFF1E293B),
-    surfaceVariant = Color(0xFF334155),
+    primary = ElectricIndigoPrimary,
+    secondary = NeonVioletAccent,
+    tertiary = CyberCyanAccent,
+    background = FileMateBackgroundDark,
+    surface = FileMateSurfaceDark,
+    surfaceVariant = FileMateSurfaceVariantDark,
     onPrimary = Color.White,
     onSecondary = Color.White,
     onBackground = Color.White,
@@ -27,12 +27,12 @@ private val DarkColorScheme = darkColorScheme(
 )
 
 private val LightColorScheme = lightColorScheme(
-    primary = Color(0xFF4F46E5),
-    secondary = Color(0xFFDB2777),
-    tertiary = Color(0xFF0284C7),
-    background = Color(0xFFF8FAFC),
-    surface = Color(0xFFFFFFFF),
-    surfaceVariant = Color(0xFFF1F5F9),
+    primary = ElectricIndigoDark,
+    secondary = NeonVioletAccent,
+    tertiary = CyberCyanAccent,
+    background = FileMateBackgroundLight,
+    surface = FileMateSurfaceLight,
+    surfaceVariant = FileMateSurfaceVariantLight,
     onPrimary = Color.White,
     onSecondary = Color.White,
     onBackground = Color(0xFF0F172A),
@@ -41,10 +41,9 @@ private val LightColorScheme = lightColorScheme(
 )
 
 @Composable
-fun WebFSTheme(
+fun FileMateTheme(
   darkTheme: Boolean = isSystemInDarkTheme(),
-  // Dynamic color is available on Android 12+
-  dynamicColor: Boolean = true,
+  dynamicColor: Boolean = false,
   content: @Composable () -> Unit,
 ) {
   val colorScheme =
@@ -59,3 +58,10 @@ fun WebFSTheme(
 
   MaterialTheme(colorScheme = colorScheme, typography = Typography, content = content)
 }
+
+@Composable
+fun WebFSTheme(
+  darkTheme: Boolean = isSystemInDarkTheme(),
+  dynamicColor: Boolean = false,
+  content: @Composable () -> Unit,
+) = FileMateTheme(darkTheme = darkTheme, dynamicColor = dynamicColor, content = content)

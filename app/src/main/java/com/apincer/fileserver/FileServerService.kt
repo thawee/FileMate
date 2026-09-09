@@ -86,7 +86,7 @@ class FileServerService : Service() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
                 channelId,
-                "Shared Server",
+                "File Mate",
                 NotificationManager.IMPORTANCE_LOW
             )
             val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
@@ -104,7 +104,7 @@ class FileServerService : Service() {
             this, 0, openAppIntent, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
         val notification: Notification = NotificationCompat.Builder(this, channelId)
-            .setContentTitle("Shared Server Running")
+            .setContentTitle("File Mate Running")
             .setContentText("Serving files on local network")
             .setSmallIcon(android.R.drawable.ic_dialog_info)
             .setContentIntent(pendingOpenAppIntent)

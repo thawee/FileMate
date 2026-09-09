@@ -77,7 +77,7 @@ class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
-            com.apincer.fileserver.theme.WebFSTheme {
+            com.apincer.fileserver.theme.FileMateTheme {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
@@ -210,7 +210,7 @@ fun WebFSScreen() {
                 modifier = Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface)
             ) {
                 TopAppBar(
-                    title = { Text("WebFS", fontWeight = FontWeight.Bold) },
+                    title = { Text("File Mate", fontWeight = FontWeight.Bold) },
                     navigationIcon = {
                         IconButton(onClick = { viewModel.navigateUp() }) {
                             Icon(Icons.Default.ArrowBack, contentDescription = "Up")
@@ -478,6 +478,7 @@ fun HostAndToolsContent(onClose: () -> Unit) {
                     )
                 )
             )
+            .statusBarsPadding()
     ) {
         Column(
             modifier = Modifier
@@ -529,7 +530,7 @@ fun HostAndToolsContent(onClose: () -> Unit) {
             )
             Spacer(modifier = Modifier.width(8.dp))
             Text(
-                text = "Shared Server",
+                text = "File Mate",
                 style = MaterialTheme.typography.headlineMedium,
                 fontWeight = FontWeight.Bold,
                 color = Color.White
@@ -721,7 +722,7 @@ fun HostAndToolsContent(onClose: () -> Unit) {
                                 }
                                 androidx.compose.material3.IconButton(onClick = {
                                     val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
-                                    val clip = android.content.ClipData.newPlainText("WebFS URL", serverUrl)
+                                    val clip = android.content.ClipData.newPlainText("File Mate URL", serverUrl)
                                     clipboard.setPrimaryClip(clip)
                                     android.widget.Toast.makeText(context, "Copied $serverUrl", android.widget.Toast.LENGTH_SHORT).show()
                                 }) {
@@ -779,7 +780,7 @@ fun HostAndToolsContent(onClose: () -> Unit) {
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceEvenly
                     ) {
-                        StatCard("Web Server", formatBytes(webfsTx), formatBytes(webfsRx))
+                        StatCard("File Server", formatBytes(webfsTx), formatBytes(webfsRx))
                         StatCard("Proxy Server", formatBytes(proxyTx), formatBytes(proxyRx))
                     }
 
