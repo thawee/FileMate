@@ -67,14 +67,16 @@ fun PremiumSlideshowScreen(
 
     // Sync PagerState with Global State
     LaunchedEffect(currentIndex) {
-        if (pagerState.currentPage != currentIndex) {
+        if (pagerState.currentPage != currentIndex && pagerState.targetPage != currentIndex) {
             pagerState.animateScrollToPage(currentIndex)
         }
     }
     
-    LaunchedEffect(pagerState.settledPage) {
-        if (com.apincer.fileserver.cast.CastingState.currentIndex.value != pagerState.settledPage) {
-            com.apincer.fileserver.cast.CastingState.currentIndex.value = pagerState.settledPage
+    LaunchedEffect(pagerState) {
+        snapshotFlow { pagerState.settledPage }.collect { settled ->
+            if (com.apincer.fileserver.cast.CastingState.currentIndex.value != settled) {
+                com.apincer.fileserver.cast.CastingState.currentIndex.value = settled
+            }
         }
     }
 

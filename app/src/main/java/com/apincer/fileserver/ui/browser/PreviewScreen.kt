@@ -62,6 +62,7 @@ fun PreviewScreen(
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
     val activeCaster by CastingState.activeCaster.collectAsState()
+    val globalIndex by CastingState.currentIndex.collectAsState()
     
     var isUiVisible by remember { mutableStateOf(true) }
     var showInfoSheet by remember { mutableStateOf(false) }
@@ -75,7 +76,7 @@ fun PreviewScreen(
     )
     LaunchedEffect(pagerState.settledPage, activeCaster) {
         activeCaster?.let { caster ->
-            val currentItem = mediaFiles[pagerState.settledPage]
+            val currentItem = mediaFiles.getOrNull(pagerState.settledPage) ?: return@LaunchedEffect
             val primaryIp = com.apincer.fileserver.getLocalIpAddresses().firstOrNull() ?: "127.0.0.1"
             val imageUrl = "http://$primaryIp:8080/files/${currentItem.path}"
             val bytes = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
@@ -95,14 +96,19 @@ fun PreviewScreen(
         )
     ) {
         Box(modifier = Modifier.fillMaxSize().background(Color.Black)) {
-            LaunchedEffect(CastingState.currentIndex.value) {
-                if (pagerState.currentPage != CastingState.currentIndex.value) {
-                    pagerState.animateScrollToPage(CastingState.currentIndex.value)
+            // Sync external index changes (slideshow auto-advance or remote casting) to pager
+            LaunchedEffect(globalIndex) {
+                if (pagerState.currentPage != globalIndex && pagerState.targetPage != globalIndex) {
+                    pagerState.animateScrollToPage(globalIndex)
                 }
             }
-            LaunchedEffect(pagerState.settledPage) {
-                if (CastingState.currentIndex.value != pagerState.settledPage) {
-                    CastingState.currentIndex.value = pagerState.settledPage
+
+            // Sync user swiping in pager back to global index once completely settled
+            LaunchedEffect(pagerState) {
+                snapshotFlow { pagerState.settledPage }.collect { settled ->
+                    if (CastingState.currentIndex.value != settled) {
+                        CastingState.currentIndex.value = settled
+                    }
                 }
             }
 
@@ -140,7 +146,7 @@ fun PreviewScreen(
                         Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = Color.White)
                     }
                     Text(
-                        text = mediaFiles[pagerState.currentPage].name,
+                        text = mediaFiles.getOrNull(pagerState.currentPage)?.name ?: "",
                         color = Color.White,
                         maxLines = 1,
                         modifier = Modifier.weight(1f).padding(horizontal = 16.dp)
@@ -178,96 +184,97 @@ fun PreviewScreen(
                     horizontalArrangement = Arrangement.SpaceEvenly,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    val currentFile = mediaFiles[pagerState.currentPage]
+                    val currentFile = mediaFiles.getOrNull(pagerState.currentPage)
+                    if (currentFile != null) {
+                        // Open With External App
+                        IconButton(onClick = {
+                            try {
+                                val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", currentFile.file)
+                                val intent = Intent(Intent.ACTION_VIEW).apply {
+                                    setDataAndType(uri, currentFile.mimeType)
+                                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                }
+                                context.startActivity(Intent.createChooser(intent, "Open with"))
+                            } catch (e: Exception) {
+                                Toast.makeText(context, "No app found to open this file", Toast.LENGTH_SHORT).show()
+                            }
+                        }) {
+                            Icon(Icons.Default.OpenInNew, contentDescription = "Open in app", tint = Color.White)
+                        }
 
-                    // Open With External App
-                    IconButton(onClick = {
-                        try {
+                        // Share
+                        IconButton(onClick = {
                             val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", currentFile.file)
-                            val intent = Intent(Intent.ACTION_VIEW).apply {
-                                setDataAndType(uri, currentFile.mimeType)
+                            val intent = Intent(Intent.ACTION_SEND).apply {
+                                type = currentFile.mimeType
+                                putExtra(Intent.EXTRA_STREAM, uri)
                                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                             }
-                            context.startActivity(Intent.createChooser(intent, "Open with"))
-                        } catch (e: Exception) {
-                            Toast.makeText(context, "No app found to open this file", Toast.LENGTH_SHORT).show()
+                            context.startActivity(Intent.createChooser(intent, "Share"))
+                        }) {
+                            Icon(Icons.Default.Share, contentDescription = "Share", tint = Color.White)
                         }
-                    }) {
-                        Icon(Icons.Default.OpenInNew, contentDescription = "Open in app", tint = Color.White)
-                    }
 
-                    // Share
-                    IconButton(onClick = {
-                        val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", currentFile.file)
-                        val intent = Intent(Intent.ACTION_SEND).apply {
-                            type = currentFile.mimeType
-                            putExtra(Intent.EXTRA_STREAM, uri)
-                            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                        }
-                        context.startActivity(Intent.createChooser(intent, "Share"))
-                    }) {
-                        Icon(Icons.Default.Share, contentDescription = "Share", tint = Color.White)
-                    }
-
-                    // Resize
-                    IconButton(onClick = {
-                        coroutineScope.launch(Dispatchers.IO) {
-                            try {
-                                val bitmap = BitmapFactory.decodeFile(currentFile.file.absolutePath)
-                                val resized = Bitmap.createScaledBitmap(bitmap, bitmap.width / 2, bitmap.height / 2, true)
-                                val newFile = File(currentFile.file.parent, "resized_${currentFile.name}")
-                                val out = FileOutputStream(newFile)
-                                resized.compress(Bitmap.CompressFormat.JPEG, 80, out)
-                                out.flush()
-                                out.close()
-                                withContext(Dispatchers.Main) {
-                                    Toast.makeText(context, "Resized & saved to ${newFile.name}", Toast.LENGTH_SHORT).show()
-                                    onFileResized()
-                                }
-                            } catch (e: Exception) {
-                                withContext(Dispatchers.Main) {
-                                    Toast.makeText(context, "Resize failed: ${e.message}", Toast.LENGTH_SHORT).show()
-                                }
-                            }
-                        }
-                    }) {
-                        Icon(Icons.Default.PhotoSizeSelectLarge, contentDescription = "Resize", tint = Color.White)
-                    }
-
-                    // Delete
-                    IconButton(onClick = {
-                        coroutineScope.launch(Dispatchers.IO) {
-                            if (currentFile.file.delete()) {
-                                withContext(Dispatchers.Main) {
-                                    Toast.makeText(context, "Deleted", Toast.LENGTH_SHORT).show()
-                                    if (mediaFiles.size == 1) {
-                                        onClose()
-                                    }
-                                    onFileDeleted()
-                                }
-                            }
-                        }
-                    }) {
-                        Icon(Icons.Default.Delete, contentDescription = "Delete", tint = Color.White)
-                    }
-
-                    // Cast
-                    if (activeCaster != null) {
+                        // Resize
                         IconButton(onClick = {
-                            coroutineScope.launch {
+                            coroutineScope.launch(Dispatchers.IO) {
                                 try {
-                                    castStatus = "Casting..."
-                                    withContext(Dispatchers.IO) {
-                                        val bytes = currentFile.file.readBytes()
-                                        activeCaster?.showImage("http://dummy/", bytes)
+                                    val bitmap = BitmapFactory.decodeFile(currentFile.file.absolutePath)
+                                    val resized = Bitmap.createScaledBitmap(bitmap, bitmap.width / 2, bitmap.height / 2, true)
+                                    val newFile = File(currentFile.file.parent, "resized_${currentFile.name}")
+                                    val out = FileOutputStream(newFile)
+                                    resized.compress(Bitmap.CompressFormat.JPEG, 80, out)
+                                    out.flush()
+                                    out.close()
+                                    withContext(Dispatchers.Main) {
+                                        Toast.makeText(context, "Resized & saved to ${newFile.name}", Toast.LENGTH_SHORT).show()
+                                        onFileResized()
                                     }
-                                    castStatus = "Casting to ${activeCaster?.deviceName}"
                                 } catch (e: Exception) {
-                                    castStatus = "Cast failed: ${e.message}"
+                                    withContext(Dispatchers.Main) {
+                                        Toast.makeText(context, "Resize failed: ${e.message}", Toast.LENGTH_SHORT).show()
+                                    }
                                 }
                             }
                         }) {
-                            Icon(Icons.Default.CastConnected, contentDescription = "Cast", tint = MaterialTheme.colorScheme.primary)
+                            Icon(Icons.Default.PhotoSizeSelectLarge, contentDescription = "Resize", tint = Color.White)
+                        }
+
+                        // Delete
+                        IconButton(onClick = {
+                            coroutineScope.launch(Dispatchers.IO) {
+                                if (currentFile.file.delete()) {
+                                    withContext(Dispatchers.Main) {
+                                        Toast.makeText(context, "Deleted", Toast.LENGTH_SHORT).show()
+                                        if (mediaFiles.size == 1) {
+                                            onClose()
+                                        }
+                                        onFileDeleted()
+                                    }
+                                }
+                            }
+                        }) {
+                            Icon(Icons.Default.Delete, contentDescription = "Delete", tint = Color.White)
+                        }
+
+                        // Cast
+                        if (activeCaster != null) {
+                            IconButton(onClick = {
+                                coroutineScope.launch {
+                                    try {
+                                        castStatus = "Casting..."
+                                        withContext(Dispatchers.IO) {
+                                            val bytes = currentFile.file.readBytes()
+                                            activeCaster?.showImage("http://dummy/", bytes)
+                                        }
+                                        castStatus = "Casting to ${activeCaster?.deviceName}"
+                                    } catch (e: Exception) {
+                                        castStatus = "Cast failed: ${e.message}"
+                                    }
+                                }
+                            }) {
+                                Icon(Icons.Default.CastConnected, contentDescription = "Cast", tint = MaterialTheme.colorScheme.primary)
+                            }
                         }
                     }
                 }
@@ -293,18 +300,20 @@ fun PreviewScreen(
                 onDismissRequest = { showInfoSheet = false },
                 containerColor = MaterialTheme.colorScheme.surface
             ) {
-                val currentFile = mediaFiles[pagerState.currentPage]
-                Column(modifier = Modifier.padding(16.dp).padding(bottom = 32.dp)) {
-                    Text("File Info", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-                    Spacer(Modifier.height(16.dp))
-                    Text("Name: ${currentFile.name}")
-                    Spacer(Modifier.height(4.dp))
-                    Text("Path: ${currentFile.path}", color = Color.Gray, style = MaterialTheme.typography.bodySmall)
-                    Spacer(Modifier.height(8.dp))
-                    Text("Size: ${currentFile.size / 1024} KB")
-                    val df = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
-                    Text("Modified: ${df.format(Date(currentFile.lastModified))}")
-                    Text("MIME Type: ${currentFile.mimeType}")
+                val currentFile = mediaFiles.getOrNull(pagerState.currentPage)
+                if (currentFile != null) {
+                    Column(modifier = Modifier.padding(16.dp).padding(bottom = 32.dp)) {
+                        Text("File Info", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                        Spacer(Modifier.height(16.dp))
+                        Text("Name: ${currentFile.name}")
+                        Spacer(Modifier.height(4.dp))
+                        Text("Path: ${currentFile.path}", color = Color.Gray, style = MaterialTheme.typography.bodySmall)
+                        Spacer(Modifier.height(8.dp))
+                        Text("Size: ${currentFile.size / 1024} KB")
+                        val df = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
+                        Text("Modified: ${df.format(Date(currentFile.lastModified))}")
+                        Text("MIME Type: ${currentFile.mimeType}")
+                    }
                 }
             }
         }

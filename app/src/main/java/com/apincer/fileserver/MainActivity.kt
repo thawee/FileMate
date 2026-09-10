@@ -32,7 +32,7 @@ import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Pause
-
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.ui.window.Dialog
@@ -109,30 +109,8 @@ fun generateQrCode(text: String, size: Int = 512): Bitmap? {
 }
 
 fun getLocalIpAddresses(): List<String> {
-    val ips = mutableListOf<String>()
-    try {
-        val interfaces = java.net.NetworkInterface.getNetworkInterfaces()
-        while (interfaces.hasMoreElements()) {
-            val networkInterface = interfaces.nextElement()
-            val name = networkInterface.name.lowercase()
-            val addresses = networkInterface.inetAddresses
-            while (addresses.hasMoreElements()) {
-                val address = addresses.nextElement()
-                if (!address.isLoopbackAddress && address is java.net.Inet4Address) {
-                    val ip = address.hostAddress ?: continue
-                    if (name.contains("wlan") || name.contains("ap") || name.contains("swlan") || name.contains("rndis")) {
-                        ips.add(0, ip)
-                    } else {
-                        ips.add(ip)
-                    }
-                }
-            }
-        }
-    } catch (e: Exception) {
-        e.printStackTrace()
-    }
-    if (ips.isEmpty()) ips.add("127.0.0.1")
-    return ips.distinct()
+    val list = NetworkUtils.getLocalNetworkAddresses().map { it.ip }
+    return if (list.isEmpty()) listOf("127.0.0.1") else list
 }
 
 fun formatBytes(bytes: Long): String {
@@ -249,7 +227,10 @@ fun WebFSScreen() {
                         editorFileItem = fileItem
                     } else {
                         val mediaFiles = files.filter { !it.isDirectory && !(it.mimeType.startsWith("text/") || it.name.substringAfterLast('.', "").lowercase() in textExtensions) }
-                        previewIndex = mediaFiles.indexOf(fileItem).takeIf { it >= 0 } ?: 0
+                        val targetIndex = mediaFiles.indexOf(fileItem).takeIf { it >= 0 } ?: 0
+                        CastingState.currentIndex.value = targetIndex
+                        CastingState.isPlaying.value = false
+                        previewIndex = targetIndex
                     }
                 }
             )
@@ -280,14 +261,15 @@ fun WebFSScreen() {
         PreviewScreen(
             initialIndex = index,
             mediaFiles = mediaFiles,
-            onClose = { previewIndex = null },
-
-
-
+            onClose = { 
+                previewIndex = null 
+                CastingState.isPlaying.value = false
+            },
             discoveredDevices = discoveredDevices,
             onFileDeleted = { 
                 viewModel.loadDirectory(viewModel.currentPath.value) 
                 previewIndex = null
+                CastingState.isPlaying.value = false
             },
             onFileResized = {
                 viewModel.loadDirectory(viewModel.currentPath.value) 
@@ -361,16 +343,57 @@ fun HostAndToolsContent(onClose: () -> Unit) {
     val proxyRx by TrafficMonitor.proxyRxBytes.collectAsState()
     val proxyTx by TrafficMonitor.proxyTxBytes.collectAsState()
 
+    var networkAddresses by remember { mutableStateOf(NetworkUtils.getLocalNetworkAddresses()) }
+    var selectedIpIndex by remember { mutableStateOf(0) }
+    val primaryIp = networkAddresses.getOrNull(selectedIpIndex)?.ip
+        ?: networkAddresses.firstOrNull()?.ip
+        ?: "127.0.0.1"
+    val qrCodeBitmap = remember(primaryIp) { generateQrCode("http://$primaryIp:8080") }
+
     val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
-    DisposableEffect(lifecycleOwner) {
+    DisposableEffect(lifecycleOwner, context) {
+        fun refreshAddresses() {
+            networkAddresses = NetworkUtils.getLocalNetworkAddresses()
+            if (selectedIpIndex >= networkAddresses.size) {
+                selectedIpIndex = 0
+            }
+        }
+
         val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
             if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
                 isServerRunning = FileServerService.isRunning
+                refreshAddresses()
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
+
+        val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? android.net.ConnectivityManager
+        val callback = object : android.net.ConnectivityManager.NetworkCallback() {
+            override fun onAvailable(network: android.net.Network) {
+                refreshAddresses()
+            }
+            override fun onLost(network: android.net.Network) {
+                refreshAddresses()
+            }
+            override fun onCapabilitiesChanged(network: android.net.Network, networkCapabilities: android.net.NetworkCapabilities) {
+                refreshAddresses()
+            }
+            override fun onLinkPropertiesChanged(network: android.net.Network, linkProperties: android.net.LinkProperties) {
+                refreshAddresses()
+            }
+        }
+        val request = android.net.NetworkRequest.Builder().build()
+        try {
+            cm?.registerNetworkCallback(request, callback)
+        } catch (e: Exception) {
+            android.util.Log.w("MainActivity", "Failed to register network callback", e)
+        }
+
         onDispose {
             lifecycleOwner.lifecycle.removeObserver(observer)
+            try {
+                cm?.unregisterNetworkCallback(callback)
+            } catch (e: Exception) {}
         }
     }
 
@@ -385,6 +408,8 @@ fun HostAndToolsContent(onClose: () -> Unit) {
     }
 
     fun startServer() {
+        networkAddresses = NetworkUtils.getLocalNetworkAddresses()
+        if (selectedIpIndex >= networkAddresses.size) selectedIpIndex = 0
         val rootUri = Uri.fromFile(Environment.getExternalStorageDirectory())
         val intent = Intent(context, FileServerService::class.java).apply {
             putExtra("FOLDER_URI", rootUri.toString())
@@ -427,14 +452,13 @@ fun HostAndToolsContent(onClose: () -> Unit) {
         }
         context.startService(intent)
         isServerRunning = false
+        networkAddresses = NetworkUtils.getLocalNetworkAddresses()
+        if (selectedIpIndex >= networkAddresses.size) selectedIpIndex = 0
     }
 
 
 
     val scrollState = rememberScrollState()
-    val localIps = remember { getLocalIpAddresses() }
-    val primaryIp = localIps.firstOrNull() ?: "127.0.0.1"
-    val qrCodeBitmap = remember(primaryIp) { generateQrCode("http://$primaryIp:8080") }
 
     val infiniteTransition = rememberInfiniteTransition(label = "pulse")
     val pulseScale by infiniteTransition.animateFloat(
@@ -535,8 +559,16 @@ fun HostAndToolsContent(onClose: () -> Unit) {
                 color = Color.White
             )
         }
+        val activeType = networkAddresses.getOrNull(selectedIpIndex)?.type
+        val connectionSubtext = when (activeType) {
+            NetworkType.HOTSPOT -> "Access via Mobile Hotspot"
+            NetworkType.WIFI -> "Access via local Wi-Fi"
+            NetworkType.ETHERNET -> "Access via Ethernet"
+            NetworkType.USB_TETHERING -> "Access via USB Tethering"
+            else -> if (primaryIp == "127.0.0.1") "Offline (No Wi-Fi / Hotspot active)" else "Access via local network"
+        }
         Text(
-            text = if (isServerRunning) "Server active • Access via local Wi-Fi" else "Secured file and network sharing.",
+            text = if (isServerRunning) "Server active • $connectionSubtext" else "Secured file and network sharing.",
             style = MaterialTheme.typography.bodyMedium,
             color = if (isServerRunning) Color(0xFF34D399) else Color.LightGray,
             textAlign = TextAlign.Center
@@ -696,41 +728,127 @@ fun HostAndToolsContent(onClose: () -> Unit) {
                         Column(
                             modifier = Modifier.padding(vertical = 12.dp)
                         ) {
-                            // URL Row
+                            // Header: Label & Action Icons
                             Row(
-                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 16.dp, vertical = 2.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.SpaceBetween
                             ) {
-                                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
                                     Icon(
                                         imageVector = Icons.Default.Info,
                                         contentDescription = null,
                                         tint = MaterialTheme.colorScheme.primary,
-                                        modifier = Modifier.size(20.dp)
+                                        modifier = Modifier.size(18.dp)
                                     )
-                                    Spacer(modifier = Modifier.width(12.dp))
+                                    Spacer(modifier = Modifier.width(8.dp))
                                     Text(
-                                        text = serverUrl,
-                                        style = MaterialTheme.typography.titleMedium,
+                                        text = "SERVER ADDRESS",
+                                        style = MaterialTheme.typography.labelMedium,
                                         fontWeight = FontWeight.Bold,
-                                        color = MaterialTheme.colorScheme.onSurface,
-                                        maxLines = 1,
-                                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                                        color = Color.LightGray,
+                                        letterSpacing = 0.5.sp
                                     )
                                 }
-                                androidx.compose.material3.IconButton(onClick = {
-                                    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
-                                    val clip = android.content.ClipData.newPlainText("File Mate URL", serverUrl)
-                                    clipboard.setPrimaryClip(clip)
-                                    android.widget.Toast.makeText(context, "Copied $serverUrl", android.widget.Toast.LENGTH_SHORT).show()
-                                }) {
-                                    Icon(
-                                        imageVector = Icons.Default.Share,
-                                        contentDescription = "Copy",
-                                        tint = MaterialTheme.colorScheme.primary
-                                    )
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    androidx.compose.material3.IconButton(
+                                        onClick = {
+                                            networkAddresses = NetworkUtils.getLocalNetworkAddresses()
+                                            if (selectedIpIndex >= networkAddresses.size) selectedIpIndex = 0
+                                            android.widget.Toast.makeText(context, "Network IP refreshed", android.widget.Toast.LENGTH_SHORT).show()
+                                        },
+                                        modifier = Modifier.size(36.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Refresh,
+                                            contentDescription = "Refresh IP",
+                                            tint = MaterialTheme.colorScheme.primary,
+                                            modifier = Modifier.size(20.dp)
+                                        )
+                                    }
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    androidx.compose.material3.IconButton(
+                                        onClick = {
+                                            val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                                            val clip = android.content.ClipData.newPlainText("File Mate URL", serverUrl)
+                                            clipboard.setPrimaryClip(clip)
+                                            android.widget.Toast.makeText(context, "Copied $serverUrl", android.widget.Toast.LENGTH_SHORT).show()
+                                        },
+                                        modifier = Modifier.size(36.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Share,
+                                            contentDescription = "Copy",
+                                            tint = MaterialTheme.colorScheme.primary,
+                                            modifier = Modifier.size(20.dp)
+                                        )
+                                    }
                                 }
+                            }
+
+                            // Dedicated Full-Width URL Display - Never Truncated!
+                            Surface(
+                                shape = RoundedCornerShape(10.dp),
+                                color = Color.Black.copy(alpha = 0.3f),
+                                modifier = Modifier
+                                    .padding(horizontal = 16.dp, vertical = 4.dp)
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                                        val clip = android.content.ClipData.newPlainText("File Mate URL", serverUrl)
+                                        clipboard.setPrimaryClip(clip)
+                                        android.widget.Toast.makeText(context, "Copied $serverUrl", android.widget.Toast.LENGTH_SHORT).show()
+                                    }
+                            ) {
+                                Text(
+                                    text = serverUrl,
+                                    style = MaterialTheme.typography.titleMedium.copy(
+                                        fontSize = 17.sp,
+                                        letterSpacing = 0.5.sp
+                                    ),
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFF38BDF8),
+                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                                    softWrap = true
+                                )
+                            }
+
+                            if (networkAddresses.size > 1) {
+                                androidx.compose.foundation.lazy.LazyRow(
+                                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    items(networkAddresses.size) { idx ->
+                                        val info = networkAddresses[idx]
+                                        val isSelected = idx == selectedIpIndex
+                                        FilterChip(
+                                            selected = isSelected,
+                                            onClick = { selectedIpIndex = idx },
+                                            label = {
+                                                Text(
+                                                    "${info.displayName}: ${info.ip}",
+                                                    fontSize = 12.sp,
+                                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                                                )
+                                            },
+                                            colors = FilterChipDefaults.filterChipColors(
+                                                selectedContainerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.25f),
+                                                selectedLabelColor = MaterialTheme.colorScheme.primary
+                                            )
+                                        )
+                                    }
+                                }
+                            }
+
+                            if (networkAddresses.isEmpty()) {
+                                Text(
+                                    text = "⚠️ No active Wi-Fi or Hotspot. Please connect to Wi-Fi or turn on Hotspot.",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = Color(0xFFFBBF24),
+                                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
+                                )
                             }
                             
                             Divider(color = Color.White.copy(alpha = 0.05f), modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))

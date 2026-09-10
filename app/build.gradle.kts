@@ -61,7 +61,7 @@ dependencies {
   implementation(libs.androidx.compose.ui)
   implementation(libs.androidx.compose.ui.tooling.preview)
   implementation(libs.androidx.compose.material3)
-  implementation("androidx.compose.material:material-icons-extended")
+  implementation(libs.androidx.compose.material.icons.extended)
   // Tooling
   debugImplementation(libs.androidx.compose.ui.tooling)
   // Instrumented tests
@@ -87,7 +87,7 @@ dependencies {
   implementation(libs.kotlinx.serialization.json)
 
   // ZXing for QR Code generation
-  implementation("com.google.zxing:core:3.5.3")
+  implementation(libs.core)
 
   // Casting (DLNA + AirPlay)
   implementation(libs.okhttp)
@@ -99,6 +99,6 @@ dependencies {
   implementation(libs.androidx.exifinterface)
 
   // Image Loading (Coil)
-  implementation("io.coil-kt:coil-compose:2.6.0")
-  implementation("io.coil-kt:coil-video:2.6.0")
+  implementation(libs.coil.compose)
+  implementation(libs.coil.video)
 }
