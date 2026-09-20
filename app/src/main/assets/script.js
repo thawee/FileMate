@@ -4,6 +4,38 @@ let sortCol = 'name';
 let sortDesc = false;
 let searchQuery = '';
 
+function getFileTypeSvg(file, isGrid) {
+    const size = isGrid ? 52 : 20;
+    const isDir = file.isDirectory;
+    const name = (file.name || '').toLowerCase();
+    
+    if (isDir) {
+        return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="#f59e0b" stroke="#d97706" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>`;
+    }
+    if (name.match(/\.(mp4|mov|avi|webm|mkv)$/i)) {
+        return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="#8b5cf6" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="20" rx="2.18" ry="2.18"></rect><line x1="7" y1="2" x2="7" y2="22"></line><line x1="17" y1="2" x2="17" y2="22"></line><line x1="2" y1="12" x2="22" y2="12"></line><line x1="2" y1="7" x2="7" y2="7"></line><line x1="2" y1="17" x2="7" y2="17"></line><line x1="17" y1="17" x2="22" y2="17"></line><line x1="17" y1="7" x2="22" y2="7"></line></svg>`;
+    }
+    if (name.match(/\.(mp3|wav|ogg|m4a|flac|aac|opus)$/i)) {
+        return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="#d946ef" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"></path><circle cx="6" cy="18" r="3"></circle><circle cx="18" cy="16" r="3"></circle></svg>`;
+    }
+    if (name.match(/\.pdf$/i)) {
+        return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line></svg>`;
+    }
+    if (name.match(/\.(zip|rar|7z|tar|gz|bz2|xz)$/i)) {
+        return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="#f97316" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="21 8 21 21 3 21 3 8"></polyline><rect x="1" y="3" width="22" height="5"></rect><line x1="10" y1="12" x2="14" y2="12"></line></svg>`;
+    }
+    if (name.match(/\.(json|js|ts|py|html|css|kt|java|cpp|c|h|sh|xml|yml|yaml|sql|php|rb|go|rs)$/i)) {
+        return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="#14b8a6" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"></polyline><polyline points="8 6 2 12 8 18"></polyline></svg>`;
+    }
+    if (name.match(/\.(apk|aab)$/i)) {
+        return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="10" rx="2"></rect><circle cx="9" cy="7" r="1"></circle><circle cx="15" cy="7" r="1"></circle><line x1="12" y1="3" x2="12" y2="5"></line></svg>`;
+    }
+    if (name.match(/\.(doc|docx|txt|rtf|odt|csv|log|md)$/i)) {
+        return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line></svg>`;
+    }
+    return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path><polyline points="13 2 13 9 20 9"></polyline></svg>`;
+}
+
 function showToast(message, type = 'info', duration = 3500) {
     const container = document.getElementById('toastContainer');
     if (!container) return;
@@ -776,6 +808,147 @@ async function confirmMove() {
     }
 }
 
+let renamingTargetName = '';
+
+function openRenameModal(fileName) {
+    renamingTargetName = fileName;
+    const input = document.getElementById('renameInput');
+    if (input) input.value = fileName;
+    const modal = document.getElementById('renameModal');
+    if (modal) modal.style.display = 'flex';
+    setTimeout(() => {
+        if (input) {
+            input.focus();
+            const dotIdx = fileName.lastIndexOf('.');
+            if (dotIdx > 0) input.setSelectionRange(0, dotIdx);
+            else input.select();
+        }
+    }, 50);
+}
+
+function closeRenameModal() {
+    const modal = document.getElementById('renameModal');
+    closeModalAnimated(modal, () => {
+        renamingTargetName = '';
+    });
+}
+
+async function confirmRename() {
+    const input = document.getElementById('renameInput');
+    const newName = input ? input.value.trim() : '';
+    if (!newName || newName === renamingTargetName) {
+        closeRenameModal();
+        return;
+    }
+    try {
+        const resp = await fetch(`/api/rename?path=${encodeURIComponent(currentPath)}&oldName=${encodeURIComponent(renamingTargetName)}&newName=${encodeURIComponent(newName)}`);
+        if (!resp.ok) {
+            const err = await resp.text();
+            throw new Error(err || 'Failed to rename');
+        }
+        showToast(`Renamed to "${newName}"`, 'success');
+        closeRenameModal();
+        fetchFiles();
+    } catch (e) {
+        showToast('Error renaming: ' + e.message, 'error');
+    }
+}
+
+async function unzipFile(fileName) {
+    try {
+        showToast(`Extracting ${fileName}...`, 'info');
+        const resp = await fetch(`/api/unzip?path=${encodeURIComponent(currentPath)}&name=${encodeURIComponent(fileName)}`, { method: 'POST' });
+        if (!resp.ok) throw new Error('Failed to unzip');
+        const res = await resp.json();
+        showToast(`Extracted ${fileName} successfully`, 'success');
+        fetchFiles();
+    } catch (e) {
+        showToast('Error extracting archive: ' + e.message, 'error');
+    }
+}
+
+let lastCheckedIndex = -1;
+
+function handleCheckboxClick(event, checkbox) {
+    const isGrid = checkbox.classList.contains('grid-checkbox');
+    const checkboxes = Array.from(document.querySelectorAll(isGrid ? '.grid-checkbox' : '.item-checkbox:not(.grid-checkbox)'));
+    const currentIndex = parseInt(checkbox.dataset.index, 10);
+    
+    if (event.shiftKey && lastCheckedIndex !== -1 && lastCheckedIndex !== currentIndex) {
+        const start = Math.min(lastCheckedIndex, currentIndex);
+        const end = Math.max(lastCheckedIndex, currentIndex);
+        const targetState = checkbox.checked;
+        
+        checkboxes.forEach(cb => {
+            const idx = parseInt(cb.dataset.index, 10);
+            if (idx >= start && idx <= end) {
+                cb.checked = targetState;
+                const otherSelector = isGrid ? `.item-checkbox:not(.grid-checkbox)[data-name="${cb.dataset.name}"]` : `.grid-checkbox[data-name="${cb.dataset.name}"]`;
+                const otherCb = document.querySelector(otherSelector);
+                if (otherCb) otherCb.checked = targetState;
+            }
+        });
+    } else {
+        const otherSelector = isGrid ? `.item-checkbox:not(.grid-checkbox)[data-name="${checkbox.dataset.name}"]` : `.grid-checkbox[data-name="${checkbox.dataset.name}"]`;
+        const otherCb = document.querySelector(otherSelector);
+        if (otherCb) otherCb.checked = checkbox.checked;
+    }
+    
+    lastCheckedIndex = currentIndex;
+    updateBatchToolbar();
+}
+
+function showContextMenu(e, file, isProtected, isMedia, isZip, fileUrl, escapedName) {
+    const menu = document.getElementById('contextMenu');
+    if (!menu) return;
+    
+    let itemsHtml = '';
+    if (file.isDirectory) {
+        itemsHtml += `<button onclick="hideContextMenu(); navigateTo('${escapedName}')"><span>📁</span> Open Folder</button>`;
+        itemsHtml += `<button onclick="hideContextMenu(); showQr('${escapedName}', true)"><span>📱</span> Share QR</button>`;
+        if (!isProtected) {
+            itemsHtml += `<a href="/api/download-zip?path=${encodeURIComponent(currentPath)}&name=${encodeURIComponent(file.name)}" download style="text-decoration:none;"><button onclick="hideContextMenu()"><span>⬇</span> Download ZIP</button></a>`;
+            itemsHtml += `<button onclick="hideContextMenu(); openRenameModal('${escapedName}')"><span>✏️</span> Rename</button>`;
+            itemsHtml += `<button onclick="hideContextMenu(); openMoveModal('${escapedName}')"><span>📦</span> Move To...</button>`;
+            itemsHtml += `<button class="menu-delete" onclick="hideContextMenu(); deleteItem('${escapedName}')"><span>🗑️</span> Delete</button>`;
+        }
+    } else {
+        if (isMedia) {
+            itemsHtml += `<button onclick="hideContextMenu(); openPreview('${escapedName}', '${fileUrl}')"><span>👁️</span> Preview</button>`;
+        } else {
+            itemsHtml += `<button onclick="hideContextMenu(); window.open('${fileUrl}', '_blank')"><span>👁️</span> View</button>`;
+        }
+        itemsHtml += `<button onclick="hideContextMenu(); copyLink('${fileUrl}', '${escapedName}')"><span>🔗</span> Copy Link</button>`;
+        itemsHtml += `<button onclick="hideContextMenu(); showQr('${escapedName}', false)"><span>📱</span> Share QR</button>`;
+        itemsHtml += `<a href="${fileUrl}" download style="text-decoration:none;"><button onclick="hideContextMenu()"><span>⬇</span> Download</button></a>`;
+        if (isZip) {
+            itemsHtml += `<button onclick="hideContextMenu(); unzipFile('${escapedName}')"><span>📂</span> Extract ZIP</button>`;
+        }
+        itemsHtml += `<button onclick="hideContextMenu(); openRenameModal('${escapedName}')"><span>✏️</span> Rename</button>`;
+        itemsHtml += `<button onclick="hideContextMenu(); openMoveModal('${escapedName}')"><span>📦</span> Move To...</button>`;
+        itemsHtml += `<button class="menu-delete" onclick="hideContextMenu(); deleteItem('${escapedName}')"><span>🗑️</span> Delete</button>`;
+    }
+    
+    menu.innerHTML = itemsHtml;
+    menu.style.display = 'flex';
+    
+    const menuWidth = 190;
+    const menuHeight = menu.offsetHeight || 220;
+    let posX = e.clientX;
+    let posY = e.clientY;
+    
+    if (posX + menuWidth > window.innerWidth) posX = window.innerWidth - menuWidth - 10;
+    if (posY + menuHeight > window.innerHeight) posY = window.innerHeight - menuHeight - 10;
+    
+    menu.style.left = `${Math.max(10, posX)}px`;
+    menu.style.top = `${Math.max(10, posY)}px`;
+}
+
+function hideContextMenu() {
+    const menu = document.getElementById('contextMenu');
+    if (menu) menu.style.display = 'none';
+}
+
 function getSelectedFiles() {
     const checkboxes = document.querySelectorAll('.item-checkbox:checked');
     const files = [];
@@ -944,7 +1117,9 @@ document.addEventListener('keydown', (e) => {
             closePreview();
             closeMoveModal();
             closeMkdirModal();
-            closeToolsModal();
+            closeQrModal();
+            closeRenameModal();
+            hideContextMenu();
         }
         return;
     }
@@ -960,7 +1135,9 @@ document.addEventListener('keydown', (e) => {
         closePreview();
         closeMoveModal();
         closeMkdirModal();
-        closeToolsModal();
+        closeQrModal();
+        closeRenameModal();
+        hideContextMenu();
         clearSelection();
     } else if (e.key === 'Delete') {
         const selected = getSelectedFiles();
@@ -971,6 +1148,8 @@ document.addEventListener('keydown', (e) => {
 });
 
 document.addEventListener('click', (e) => {
+    hideContextMenu();
+
     const previewModal = document.getElementById('previewModal');
     if (e.target === previewModal) closePreview();
 
@@ -980,8 +1159,8 @@ document.addEventListener('click', (e) => {
     const mkdirModal = document.getElementById('mkdirModal');
     if (e.target === mkdirModal) closeMkdirModal();
 
-    const toolsModal = document.getElementById('toolsModal');
-    if (e.target === toolsModal) closeToolsModal();
+    const renameModal = document.getElementById('renameModal');
+    if (e.target === renameModal) closeRenameModal();
 
     if (e.target.closest('.card-menu-dropdown button')) {
         document.querySelectorAll('.card-menu-dropdown.show').forEach(d => d.classList.remove('show'));
@@ -1001,7 +1180,22 @@ function toggleCardMenu(event, btn) {
     dropdown.classList.toggle('show', !isVisible);
 }
 
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
+    // Process auto-login PIN from barcode/QR query param
+    const urlParams = new URLSearchParams(window.location.search);
+    const pinParam = urlParams.get('pin');
+    if (pinParam) {
+        try {
+            const authResp = await fetch('/api/auth?pin=' + encodeURIComponent(pinParam));
+            if (authResp.ok) {
+                showToast('Authenticated via QR Code', 'success', 2500);
+            }
+            // Sanitize address bar so PIN isn't preserved in history or bookmarks
+            const cleanUrl = window.location.pathname + (window.location.hash || '');
+            window.history.replaceState({}, document.title, cleanUrl);
+        } catch (_) {}
+    }
+
     fetchSystemInfo();
     fetchFiles();
 
@@ -1103,12 +1297,20 @@ async function fetchSystemInfo() {
             return `${s}s`;
         };
 
+        let storageHtml = '';
+        if (info.totalBytes && info.totalBytes > 0) {
+            const usedBytes = info.totalBytes - info.freeBytes;
+            const usedPct = Math.round((usedBytes / info.totalBytes) * 100);
+            storageHtml = `<span>•</span><span>💾 ${formatBytes(info.freeBytes)} free of ${formatBytes(info.totalBytes)} (${usedPct}% used)</span>`;
+        }
+
         systemInfoElement.innerHTML = `
             <span>📱 ${info.model} (Android ${info.osVersion})</span>
             <span>•</span>
             <span>App v${info.appVersion || '1.0'}</span>
             <span>•</span>
             <span>⏱️ Uptime: ${formatUptime(info.uptimeSeconds || 0)}</span>
+            ${storageHtml}
         `;
     } catch (error) {
         console.error('Error fetching system info:', error);
@@ -1159,26 +1361,14 @@ function renderFiles(files) {
 
     if (emptyState) emptyState.style.display = 'none';
 
-    files.forEach(file => {
+    files.forEach((file, index) => {
         const fileUrl = `/api/download/${encodeURIComponent(file.name)}?path=${encodeURIComponent(currentPath)}&_t=${file.lastModified}`;
+        const filePath = currentPath ? (currentPath + '/' + file.name) : file.name;
+        const thumbUrl = `/api/thumbnail?path=${encodeURIComponent(filePath)}&_t=${file.lastModified}`;
         const isImage = file.name.match(/\.(jpg|jpeg|png|gif|webp|svg|bmp|ico)$/i);
+        const isZip = file.name.match(/\.zip$/i);
         const isMedia = isImage || file.name.match(/\.(mp4|webm|mkv|mov|avi|mp3|wav|ogg|m4a|flac|aac|opus|pdf|txt|json|md|js|py|html|css|kt|java)$/i);
         const escapedName = escapeJsArg(file.name);
-
-        let iconEmoji = '📄';
-        if (file.isDirectory) {
-            iconEmoji = '📁';
-        } else if (isImage) {
-            iconEmoji = '🖼️';
-        } else if (file.name.match(/\.(mp4|mov|avi|webm|mkv)$/i)) {
-            iconEmoji = '🎬';
-        } else if (file.name.match(/\.(mp3|wav|ogg|m4a|flac|aac|opus)$/i)) {
-            iconEmoji = '🎵';
-        } else if (file.name.match(/\.(pdf)$/i)) {
-            iconEmoji = '📕';
-        } else if (file.name.match(/\.(json|js|py|html|css|kt|java|cpp|c|h|sh|xml|yml|yaml)$/i)) {
-            iconEmoji = '💻';
-        }
 
         const isProtected = file.isDirectory && currentPath === "" && new Set([
             "Android", "DCIM", "Pictures", "Movies", "Music", "Download", "Documents",
@@ -1186,13 +1376,18 @@ function renderFiles(files) {
         ]).has(file.name);
 
         const iconHtml = isImage 
-            ? `<img src="${fileUrl}" class="file-thumbnail" alt="${escapeHtml(file.name)}" loading="lazy" />`
-            : iconEmoji;
+            ? `<img src="${thumbUrl}" class="file-thumbnail" alt="${escapeHtml(file.name)}" loading="lazy" onerror="this.onerror=null; this.src='${fileUrl}';" />`
+            : getFileTypeSvg(file, false);
 
         if (tbody) {
             const tr = document.createElement('tr');
+            tr.oncontextmenu = (e) => {
+                e.preventDefault();
+                showContextMenu(e, file, isProtected, isMedia, isZip, fileUrl, escapedName);
+            };
+
             const checkboxHtml = isProtected ? `<td style="text-align: center;"></td>` : `<td style="text-align: center;" onclick="event.stopPropagation();">
-                <input type="checkbox" class="custom-checkbox item-checkbox" data-name="${escapedName}" data-is-dir="${file.isDirectory}" onclick="updateBatchToolbar()" />
+                <input type="checkbox" class="custom-checkbox item-checkbox" data-index="${index}" data-name="${escapedName}" data-is-dir="${file.isDirectory}" onclick="handleCheckboxClick(event, this)" />
             </td>`;
 
             if (file.isDirectory) {
@@ -1207,11 +1402,17 @@ function renderFiles(files) {
                     <td>--</td>
                     <td>${formatDate(file.lastModified)}</td>
                     <td class="action-links">
-                        ${isProtected ? '' : `<button class="btn-action move-btn" onclick="openMoveModal('${escapedName}')">📦 Move</button>`}
-                        ${isProtected ? '' : `<a href="/api/download-zip?path=${encodeURIComponent(currentPath)}&name=${encodeURIComponent(file.name)}" class="download-btn" download>⬇ ZIP</a>`}
-                        <button class="btn-action copy-btn" onclick="showQr('${escapedName}', true)" title="Share QR">📱 QR</button>
-
-                        ${isProtected ? '' : `<button class="btn-action delete-btn" onclick="deleteItem('${escapedName}')">🗑️ Delete</button>`}
+                        ${isProtected ? '' : `<a href="/api/download-zip?path=${encodeURIComponent(currentPath)}&name=${encodeURIComponent(file.name)}" class="download-btn" download title="Download ZIP">⬇ ZIP</a>`}
+                        <div class="card-menu-wrapper">
+                            <button class="btn-action card-menu-btn" onclick="toggleCardMenu(event, this)" aria-label="More options" title="More options">•••</button>
+                            <div class="card-menu-dropdown">
+                                <button onclick="navigateTo('${escapedName}')"><span>📁</span> Open Folder</button>
+                                <button onclick="showQr('${escapedName}', true)"><span>📱</span> Share QR</button>
+                                ${isProtected ? '' : `<button onclick="openRenameModal('${escapedName}')"><span>✏️</span> Rename</button>`}
+                                ${isProtected ? '' : `<button onclick="openMoveModal('${escapedName}')"><span>📦</span> Move To...</button>`}
+                                ${isProtected ? '' : `<button class="menu-delete" onclick="deleteItem('${escapedName}')"><span>🗑️</span> Delete</button>`}
+                            </div>
+                        </div>
                     </td>
                 `;
             } else {
@@ -1226,13 +1427,20 @@ function renderFiles(files) {
                     <td>${formatBytes(file.size)}</td>
                     <td>${formatDate(file.lastModified)}</td>
                     <td class="action-links">
-                        ${isMedia ? `<button class="btn-action view-btn" onclick="openPreview('${escapedName}', '${fileUrl}')">👁️ View</button>` : `<a href="${fileUrl}" target="_blank" class="btn-action view-btn">👁️ View</a>`}
-                        <button class="btn-action copy-btn" onclick="copyLink('${fileUrl}', '${escapedName}')" title="Copy Link">🔗 Link</button>
-                        <button class="btn-action copy-btn" onclick="showQr('${escapedName}', false)" title="Share QR">📱 QR</button>
-
-                        <button class="btn-action move-btn" onclick="openMoveModal('${escapedName}')">📦 Move</button>
-                        <a href="${fileUrl}" class="download-btn" download>⬇ Download</a>
-                        <button class="btn-action delete-btn" onclick="deleteItem('${escapedName}')">🗑️ Delete</button>
+                        ${isZip ? `<button class="btn-action view-btn" onclick="unzipFile('${escapedName}')" title="Extract ZIP Archive">📦 Unzip</button>` : ''}
+                        <a href="${fileUrl}" class="download-btn" download title="Download file">⬇ Download</a>
+                        <div class="card-menu-wrapper">
+                            <button class="btn-action card-menu-btn" onclick="toggleCardMenu(event, this)" aria-label="More options" title="More options">•••</button>
+                            <div class="card-menu-dropdown">
+                                ${isMedia ? `<button onclick="openPreview('${escapedName}', '${fileUrl}')"><span>👁️</span> Preview</button>` : `<button onclick="window.open('${fileUrl}', '_blank')"><span>👁️</span> View</button>`}
+                                <button onclick="copyLink('${fileUrl}', '${escapedName}')"><span>🔗</span> Copy Link</button>
+                                <button onclick="showQr('${escapedName}', false)"><span>📱</span> Share QR</button>
+                                ${isZip ? `<button onclick="unzipFile('${escapedName}')"><span>📂</span> Extract ZIP</button>` : ''}
+                                <button onclick="openRenameModal('${escapedName}')"><span>✏️</span> Rename</button>
+                                <button onclick="openMoveModal('${escapedName}')"><span>📦</span> Move To...</button>
+                                <button class="menu-delete" onclick="deleteItem('${escapedName}')"><span>🗑️</span> Delete</button>
+                            </div>
+                        </div>
                     </td>
                 `;
             }
@@ -1242,12 +1450,16 @@ function renderFiles(files) {
         if (gridContainer) {
             const card = document.createElement('div');
             card.className = 'grid-card';
+            card.oncontextmenu = (e) => {
+                e.preventDefault();
+                showContextMenu(e, file, isProtected, isMedia, isZip, fileUrl, escapedName);
+            };
 
             const previewContent = isImage 
-                ? `<img src="${fileUrl}" alt="${escapeHtml(file.name)}" loading="lazy" />`
-                : iconEmoji;
+                ? `<img src="${thumbUrl}" alt="${escapeHtml(file.name)}" loading="lazy" onerror="this.onerror=null; this.src='${fileUrl}';" />`
+                : getFileTypeSvg(file, true);
 
-            const gridCheckbox = isProtected ? '' : `<input type="checkbox" class="custom-checkbox item-checkbox grid-checkbox" data-name="${escapedName}" data-is-dir="${file.isDirectory}" onclick="event.stopPropagation(); updateBatchToolbar();" />`;
+            const gridCheckbox = isProtected ? '' : `<input type="checkbox" class="custom-checkbox item-checkbox grid-checkbox" data-index="${index}" data-name="${escapedName}" data-is-dir="${file.isDirectory}" onclick="event.stopPropagation(); handleCheckboxClick(event, this);" />`;
 
             if (file.isDirectory) {
                 card.innerHTML = `
@@ -1264,7 +1476,8 @@ function renderFiles(files) {
                             <div class="card-menu-dropdown">
                                 <button onclick="navigateTo('${escapedName}')"><span>📁</span> Open Folder</button>
                                 <button onclick="showQr('${escapedName}', true)"><span>📱</span> Share QR</button>
-                                ${isProtected ? '' : `<button onclick="openMoveModal('${escapedName}')"><span>📦</span> Move / Rename</button>`}
+                                ${isProtected ? '' : `<button onclick="openRenameModal('${escapedName}')"><span>✏️</span> Rename</button>`}
+                                ${isProtected ? '' : `<button onclick="openMoveModal('${escapedName}')"><span>📦</span> Move To...</button>`}
                                 ${isProtected ? '' : `<button class="menu-delete" onclick="deleteItem('${escapedName}')"><span>🗑️</span> Delete</button>`}
                             </div>
                         </div>
@@ -1288,7 +1501,9 @@ function renderFiles(files) {
                                 ${isMedia ? `<button onclick="openPreview('${escapedName}', '${fileUrl}')"><span>👁️</span> Preview</button>` : `<button onclick="window.open('${fileUrl}', '_blank')"><span>👁️</span> View</button>`}
                                 <button onclick="copyLink('${fileUrl}', '${escapedName}')"><span>🔗</span> Copy Link</button>
                                 <button onclick="showQr('${escapedName}', false)"><span>📱</span> Share QR</button>
-                                <button onclick="openMoveModal('${escapedName}')"><span>📦</span> Move / Rename</button>
+                                ${isZip ? `<button onclick="unzipFile('${escapedName}')"><span>📂</span> Extract ZIP</button>` : ''}
+                                <button onclick="openRenameModal('${escapedName}')"><span>✏️</span> Rename</button>
+                                <button onclick="openMoveModal('${escapedName}')"><span>📦</span> Move To...</button>
                                 <button class="menu-delete" onclick="deleteItem('${escapedName}')"><span>🗑️</span> Delete</button>
                             </div>
                         </div>

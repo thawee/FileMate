@@ -49,6 +49,7 @@ fun formatSize(size: Long): String {
 @Composable
 fun FileBrowserScreen(
     viewModel: FileBrowserViewModel = viewModel(),
+    modifier: Modifier = Modifier,
     bottomPadding: androidx.compose.ui.unit.Dp = 8.dp,
     onFileClick: (FileItem) -> Unit
 ) {
@@ -60,6 +61,9 @@ fun FileBrowserScreen(
     
     var selectedFile by remember { mutableStateOf<FileItem?>(null) }
     var isRefreshing by remember { mutableStateOf(false) }
+    var showMkdirDialog by remember { mutableStateOf(false) }
+    var newFolderName by remember { mutableStateOf("") }
+    val context = LocalContext.current
 
     // Intercept system back gestures to navigate up folders until root
     val canGoBack = currentPath.absolutePath != viewModel.rootDir.absolutePath
@@ -71,7 +75,51 @@ fun FileBrowserScreen(
         if (!isLoading) isRefreshing = false
     }
 
-    Column(modifier = Modifier.fillMaxSize()) {
+    if (showMkdirDialog) {
+        AlertDialog(
+            onDismissRequest = { showMkdirDialog = false },
+            title = { Text("Create New Folder") },
+            text = {
+                OutlinedTextField(
+                    value = newFolderName,
+                    onValueChange = { newFolderName = it },
+                    label = { Text("Folder Name") },
+                    placeholder = { Text("e.g. Documents") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        val trimmed = newFolderName.trim()
+                        if (trimmed.isNotEmpty()) {
+                            val newDir = File(currentPath, trimmed)
+                            if (newDir.exists()) {
+                                Toast.makeText(context, "Folder already exists", Toast.LENGTH_SHORT).show()
+                            } else if (newDir.mkdir()) {
+                                Toast.makeText(context, "Folder created", Toast.LENGTH_SHORT).show()
+                                viewModel.reload()
+                                showMkdirDialog = false
+                            } else {
+                                Toast.makeText(context, "Failed to create folder", Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                    },
+                    enabled = newFolderName.isNotBlank()
+                ) {
+                    Text("Create")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showMkdirDialog = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
+    Column(modifier = modifier.fillMaxSize()) {
         // Search and Sort Bar
         Row(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
@@ -93,7 +141,10 @@ fun FileBrowserScreen(
                 singleLine = true,
                 shape = RoundedCornerShape(26.dp)
             )
-            Spacer(modifier = Modifier.width(8.dp))
+            Spacer(modifier = Modifier.width(4.dp))
+            IconButton(onClick = { newFolderName = ""; showMkdirDialog = true }) {
+                Icon(Icons.Default.CreateNewFolder, contentDescription = "New Folder", tint = MaterialTheme.colorScheme.primary)
+            }
             var sortExpanded by remember { mutableStateOf(false) }
             Box {
                 IconButton(onClick = { sortExpanded = true }) {
@@ -163,88 +214,110 @@ fun FileBrowserScreen(
             }
         }
 
-        PullToRefreshBox(
-            isRefreshing = isRefreshing,
-            onRefresh = {
-                isRefreshing = true
-                viewModel.reload()
-            },
-            modifier = Modifier.fillMaxSize()
-        ) {
-            if (isLoading && files.isEmpty() && !isRefreshing) {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
-                }
-            } else if (files.isEmpty()) {
-                Box(
-                    modifier = Modifier.fillMaxSize().padding(32.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Icon(
-                            imageVector = Icons.Default.FolderOpen,
-                            contentDescription = null,
-                            modifier = Modifier.size(56.dp),
-                            tint = Color.Gray.copy(alpha = 0.5f)
-                        )
-                        Spacer(modifier = Modifier.height(12.dp))
-                        Text(
-                            text = if (searchQuery.isNotEmpty()) "No matching files found" else "Folder is empty",
-                            style = MaterialTheme.typography.titleMedium,
-                            color = Color.Gray
-                        )
-                        if (searchQuery.isEmpty()) {
-                            Spacer(modifier = Modifier.height(4.dp))
-                            Text(
-                                text = "Upload files via browser or create new folders",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = Color.Gray.copy(alpha = 0.7f)
-                            )
-                        }
+        Box(modifier = Modifier.fillMaxSize()) {
+            PullToRefreshBox(
+                isRefreshing = isRefreshing,
+                onRefresh = {
+                    isRefreshing = true
+                    viewModel.reload()
+                },
+                modifier = Modifier.fillMaxSize()
+            ) {
+                if (isLoading && files.isEmpty() && !isRefreshing) {
+                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
                     }
-                }
-            } else {
-                val listPadding = PaddingValues(top = 8.dp, start = 8.dp, end = 8.dp, bottom = bottomPadding)
-                if (isListView) {
-                    LazyColumn(
-                        contentPadding = listPadding,
-                        modifier = Modifier.fillMaxSize()
+                } else if (files.isEmpty()) {
+                    Box(
+                        modifier = Modifier.fillMaxSize().padding(32.dp),
+                        contentAlignment = Alignment.Center
                     ) {
-                        lazyItems(files, key = { it.path }) { item ->
-                            FileListItem(
-                                item = item,
-                                onClick = {
-                                    if (item.isDirectory) {
-                                        viewModel.loadDirectory(item.file)
-                                    } else {
-                                        onFileClick(item)
-                                    }
-                                },
-                                onLongClick = { selectedFile = item }
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Icon(
+                                imageVector = Icons.Default.FolderOpen,
+                                contentDescription = null,
+                                modifier = Modifier.size(56.dp),
+                                tint = Color.Gray.copy(alpha = 0.5f)
                             )
+                            Spacer(modifier = Modifier.height(12.dp))
+                            Text(
+                                text = if (searchQuery.isNotEmpty()) "No matching files found" else "Folder is empty",
+                                style = MaterialTheme.typography.titleMedium,
+                                color = Color.Gray
+                            )
+                            if (searchQuery.isEmpty()) {
+                                Spacer(modifier = Modifier.height(6.dp))
+                                Text(
+                                    text = "Upload files via browser or create new folders",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = Color.Gray.copy(alpha = 0.7f)
+                                )
+                                Spacer(modifier = Modifier.height(14.dp))
+                                Button(
+                                    onClick = { newFolderName = ""; showMkdirDialog = true },
+                                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+                                ) {
+                                    Icon(Icons.Default.CreateNewFolder, contentDescription = null, modifier = Modifier.size(18.dp))
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text("New Folder")
+                                }
+                            }
                         }
                     }
                 } else {
-                    LazyVerticalGrid(
-                        columns = GridCells.Adaptive(minSize = 130.dp),
-                        contentPadding = listPadding,
-                        modifier = Modifier.fillMaxSize()
-                    ) {
-                        items(files, key = { it.path }) { item ->
-                            FileGridItem(
-                                item = item,
-                                onClick = {
-                                    if (item.isDirectory) {
-                                        viewModel.loadDirectory(item.file)
-                                    } else {
-                                        onFileClick(item)
-                                    }
-                                },
-                                onLongClick = { selectedFile = item }
-                            )
+                    val listPadding = PaddingValues(top = 8.dp, start = 8.dp, end = 8.dp, bottom = bottomPadding + 64.dp)
+                    if (isListView) {
+                        LazyColumn(
+                            contentPadding = listPadding,
+                            modifier = Modifier.fillMaxSize()
+                        ) {
+                            lazyItems(files, key = { it.path }) { item ->
+                                FileListItem(
+                                    item = item,
+                                    onClick = {
+                                        if (item.isDirectory) {
+                                            viewModel.loadDirectory(item.file)
+                                        } else {
+                                            onFileClick(item)
+                                        }
+                                    },
+                                    onLongClick = { selectedFile = item }
+                                )
+                            }
+                        }
+                    } else {
+                        LazyVerticalGrid(
+                            columns = GridCells.Adaptive(minSize = 130.dp),
+                            contentPadding = listPadding,
+                            modifier = Modifier.fillMaxSize()
+                        ) {
+                            items(files, key = { it.path }) { item ->
+                                FileGridItem(
+                                    item = item,
+                                    onClick = {
+                                        if (item.isDirectory) {
+                                            viewModel.loadDirectory(item.file)
+                                        } else {
+                                            onFileClick(item)
+                                        }
+                                    },
+                                    onLongClick = { selectedFile = item }
+                                )
+                            }
                         }
                     }
                 }
+            }
+
+            FloatingActionButton(
+                onClick = { newFolderName = ""; showMkdirDialog = true },
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(bottom = bottomPadding + 16.dp, end = 16.dp),
+                containerColor = MaterialTheme.colorScheme.primary,
+                contentColor = Color.White
+            ) {
+                Icon(Icons.Default.CreateNewFolder, contentDescription = "New Folder")
             }
         }
     }
@@ -262,14 +335,115 @@ fun FileBrowserScreen(
 @Composable
 fun FileContextMenu(item: FileItem, onDismiss: () -> Unit, onReload: () -> Unit) {
     val context = LocalContext.current
+    var showRenameDialog by remember { mutableStateOf(false) }
+    var renameText by remember { mutableStateOf(item.name) }
+    var showDeleteConfirmDialog by remember { mutableStateOf(false) }
+    var showPropertiesDialog by remember { mutableStateOf(false) }
+
+    if (showRenameDialog) {
+        AlertDialog(
+            onDismissRequest = { showRenameDialog = false },
+            title = { Text("Rename ${if (item.isDirectory) "Folder" else "File"}") },
+            text = {
+                OutlinedTextField(
+                    value = renameText,
+                    onValueChange = { renameText = it },
+                    label = { Text("New Name") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        val trimmed = renameText.trim()
+                        if (trimmed.isNotEmpty() && trimmed != item.name) {
+                            val target = File(item.file.parentFile, trimmed)
+                            if (target.exists()) {
+                                Toast.makeText(context, "An item with this name already exists", Toast.LENGTH_SHORT).show()
+                            } else if (item.file.renameTo(target)) {
+                                Toast.makeText(context, "Renamed successfully", Toast.LENGTH_SHORT).show()
+                                onReload()
+                                onDismiss()
+                            } else {
+                                Toast.makeText(context, "Rename failed", Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                        showRenameDialog = false
+                    },
+                    enabled = renameText.isNotBlank() && renameText.trim() != item.name
+                ) {
+                    Text("Rename")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showRenameDialog = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
+    if (showDeleteConfirmDialog) {
+        AlertDialog(
+            onDismissRequest = { showDeleteConfirmDialog = false },
+            title = { Text("Delete ${if (item.isDirectory) "Folder" else "File"}?") },
+            text = { Text("Are you sure you want to delete '${item.name}'? This action cannot be undone.") },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showDeleteConfirmDialog = false
+                        if (item.file.deleteRecursively()) {
+                            Toast.makeText(context, "Deleted", Toast.LENGTH_SHORT).show()
+                            onReload()
+                        } else {
+                            Toast.makeText(context, "Failed to delete", Toast.LENGTH_SHORT).show()
+                        }
+                        onDismiss()
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                ) {
+                    Text("Delete")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteConfirmDialog = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
+    if (showPropertiesDialog) {
+        val df = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
+        AlertDialog(
+            onDismissRequest = { showPropertiesDialog = false },
+            title = { Text("Properties") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Name: ${item.name}", fontWeight = FontWeight.Bold)
+                    Text("Location: ${item.file.parent ?: "/"}")
+                    Text("Type: ${if (item.isDirectory) "Folder" else item.mimeType}")
+                    Text("Size: ${if (item.isDirectory) "--" else formatSize(item.size)} (${item.size} bytes)")
+                    Text("Modified: ${df.format(Date(item.lastModified))}")
+                }
+            },
+            confirmButton = {
+                Button(onClick = { showPropertiesDialog = false }) {
+                    Text("OK")
+                }
+            }
+        )
+    }
+
     ModalBottomSheet(onDismissRequest = onDismiss) {
         Column(modifier = Modifier.padding(16.dp).padding(bottom = 32.dp)) {
-            Text(item.name, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(item.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Spacer(modifier = Modifier.height(16.dp))
             
             ListItem(
                 headlineContent = { Text("Share") },
-                leadingContent = { Icon(Icons.Default.Share, contentDescription = null) },
+                leadingContent = { Icon(Icons.Default.Share, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
                 modifier = Modifier.clickable {
                     val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", item.file)
                     val intent = Intent(Intent.ACTION_SEND).apply {
@@ -282,16 +456,24 @@ fun FileContextMenu(item: FileItem, onDismiss: () -> Unit, onReload: () -> Unit)
                 }
             )
             ListItem(
-                headlineContent = { Text("Delete") },
+                headlineContent = { Text("Rename") },
+                leadingContent = { Icon(Icons.Default.Edit, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
+                modifier = Modifier.clickable {
+                    showRenameDialog = true
+                }
+            )
+            ListItem(
+                headlineContent = { Text("Properties") },
+                leadingContent = { Icon(Icons.Default.Info, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
+                modifier = Modifier.clickable {
+                    showPropertiesDialog = true
+                }
+            )
+            ListItem(
+                headlineContent = { Text("Delete", color = MaterialTheme.colorScheme.error) },
                 leadingContent = { Icon(Icons.Default.Delete, contentDescription = null, tint = MaterialTheme.colorScheme.error) },
                 modifier = Modifier.clickable {
-                    if (item.file.deleteRecursively()) {
-                        Toast.makeText(context, "Deleted", Toast.LENGTH_SHORT).show()
-                        onReload()
-                    } else {
-                        Toast.makeText(context, "Failed to delete", Toast.LENGTH_SHORT).show()
-                    }
-                    onDismiss()
+                    showDeleteConfirmDialog = true
                 }
             )
         }
@@ -320,14 +502,7 @@ fun FileGridItem(item: FileItem, onClick: () -> Unit, onLongClick: () -> Unit) {
                 .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
             contentAlignment = Alignment.Center
         ) {
-            if (item.isDirectory) {
-                Icon(
-                    imageVector = Icons.Default.Folder,
-                    contentDescription = "Folder",
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(48.dp)
-                )
-            } else if (item.mimeType.startsWith("image/") || item.mimeType.startsWith("video/")) {
+            if (item.mimeType.startsWith("image/") || item.mimeType.startsWith("video/")) {
                 AsyncImage(
                     model = item.file,
                     contentDescription = item.name,
@@ -335,22 +510,29 @@ fun FileGridItem(item: FileItem, onClick: () -> Unit, onLongClick: () -> Unit) {
                     modifier = Modifier.fillMaxSize()
                 )
                 if (item.mimeType.startsWith("video/")) {
-                    Icon(
-                        imageVector = Icons.Default.PlayArrow,
-                        contentDescription = "Video",
-                        tint = Color.White.copy(alpha = 0.8f),
+                    Surface(
+                        shape = androidx.compose.foundation.shape.CircleShape,
+                        color = Color.Black.copy(alpha = 0.6f),
                         modifier = Modifier
                             .align(Alignment.BottomStart)
-                            .padding(4.dp)
-                            .size(20.dp)
-                    )
+                            .padding(6.dp)
+                            .size(24.dp)
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                imageVector = Icons.Default.PlayArrow,
+                                contentDescription = "Video",
+                                tint = Color.White,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
+                    }
                 }
             } else {
-                Icon(
-                    imageVector = Icons.Default.InsertDriveFile,
-                    contentDescription = "File",
-                    tint = Color.Gray,
-                    modifier = Modifier.size(40.dp)
+                FileTypeIconBadge(
+                    item = item,
+                    iconSize = 44.dp,
+                    modifier = Modifier.fillMaxSize()
                 )
             }
         }
@@ -362,6 +544,46 @@ fun FileGridItem(item: FileItem, onClick: () -> Unit, onLongClick: () -> Unit) {
             maxLines = 2,
             overflow = TextOverflow.Ellipsis,
             textAlign = TextAlign.Center
+        )
+    }
+}
+
+@Composable
+fun FileTypeIconBadge(
+    item: FileItem,
+    iconSize: androidx.compose.ui.unit.Dp,
+    modifier: Modifier = Modifier
+) {
+    val ext = item.name.substringAfterLast('.', "").lowercase()
+    val isArchive = item.mimeType.contains("zip") || item.mimeType.contains("tar") || item.mimeType.contains("compressed") || ext in listOf("zip", "rar", "7z", "tar", "gz", "bz2", "xz")
+    val isPdf = item.mimeType == "application/pdf" || ext == "pdf"
+    val isAudio = item.mimeType.startsWith("audio/") || ext in listOf("mp3", "wav", "flac", "aac", "m4a", "ogg", "wma")
+    val isCode = ext in listOf("kt", "java", "js", "ts", "py", "c", "cpp", "h", "cs", "php", "rb", "go", "rs", "swift", "html", "css", "xml", "json", "yaml", "yml", "sql", "sh", "bat")
+    val isDoc = ext in listOf("doc", "docx", "xls", "xlsx", "ppt", "pptx", "txt", "rtf", "odt", "ods", "odp", "csv", "log", "md")
+    val isApk = ext in listOf("apk", "aab", "xapk")
+
+    val (icon, color) = when {
+        item.isDirectory -> Icons.Default.Folder to Color(0xFFFFA000)
+        isPdf -> Icons.Default.PictureAsPdf to Color(0xFFE53935)
+        isAudio -> Icons.Default.AudioFile to Color(0xFF8E24AA)
+        isArchive -> Icons.Default.FolderZip to Color(0xFFFB8C00)
+        isApk -> Icons.Default.Android to Color(0xFF43A047)
+        isCode -> Icons.Default.Code to Color(0xFF00897B)
+        isDoc -> Icons.Default.Description to Color(0xFF1E88E5)
+        else -> Icons.Default.InsertDriveFile to Color(0xFF78909C)
+    }
+
+    Box(
+        modifier = modifier
+            .clip(RoundedCornerShape(8.dp))
+            .background(color.copy(alpha = 0.14f)),
+        contentAlignment = Alignment.Center
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            tint = color,
+            modifier = Modifier.size(iconSize)
         )
     }
 }
@@ -382,13 +604,11 @@ fun FileListItem(item: FileItem, onClick: () -> Unit, onLongClick: () -> Unit) {
         Box(
             modifier = Modifier
                 .size(48.dp)
-                .clip(RoundedCornerShape(8.dp))
+                .clip(RoundedCornerShape(10.dp))
                 .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
             contentAlignment = Alignment.Center
         ) {
-            if (item.isDirectory) {
-                Icon(Icons.Default.Folder, contentDescription = "Folder", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(32.dp))
-            } else if (item.mimeType.startsWith("image/") || item.mimeType.startsWith("video/")) {
+            if (item.mimeType.startsWith("image/") || item.mimeType.startsWith("video/")) {
                 AsyncImage(
                     model = item.file,
                     contentDescription = item.name,
@@ -396,10 +616,30 @@ fun FileListItem(item: FileItem, onClick: () -> Unit, onLongClick: () -> Unit) {
                     modifier = Modifier.fillMaxSize()
                 )
                 if (item.mimeType.startsWith("video/")) {
-                    Icon(Icons.Default.PlayArrow, contentDescription = "Video", tint = Color.White.copy(alpha = 0.8f), modifier = Modifier.align(Alignment.BottomStart).padding(2.dp).size(16.dp))
+                    Surface(
+                        shape = androidx.compose.foundation.shape.CircleShape,
+                        color = Color.Black.copy(alpha = 0.6f),
+                        modifier = Modifier
+                            .align(Alignment.BottomStart)
+                            .padding(2.dp)
+                            .size(16.dp)
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                imageVector = Icons.Default.PlayArrow,
+                                contentDescription = "Video",
+                                tint = Color.White,
+                                modifier = Modifier.size(10.dp)
+                            )
+                        }
+                    }
                 }
             } else {
-                Icon(Icons.Default.InsertDriveFile, contentDescription = "File", tint = Color.Gray, modifier = Modifier.size(24.dp))
+                FileTypeIconBadge(
+                    item = item,
+                    iconSize = 28.dp,
+                    modifier = Modifier.fillMaxSize()
+                )
             }
         }
         

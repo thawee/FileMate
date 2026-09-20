@@ -4,6 +4,46 @@ All notable changes to the **File Mate** Android Application and Web Frontend fi
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to Semantic Versioning.
 
+## [2.1.0] - 2026-09-20
+
+### 🛠️ Tools & Proxy Hub Overhaul
+- **Dedicated Tools & Proxy Hub Architecture:**
+  - Completely refactored the legacy host/tools dialog into a focused, modern 3-tab **Tools & Proxy Hub** (`ToolsAndProxyHubContent`), eliminating redundant server start/stop controls.
+  - **Tab 0: HTTP Proxy Suite:** Active Port 8081 status indicator, 1-tap copy endpoint, developer CLI environment snippet (`export http_proxy=...; export https_proxy=...`), test curl command, and step-by-step setup guides for iOS/iPadOS, Android, macOS, and Windows.
+  - **Tab 1: Storage Maintenance:** Real-time device capacity breakdown via Android `StatFs` (Free, Used, Total, and colored progress bar), 1-click empty directory cleaner with protected system folder safeguards, and 1-click desktop/OS junk purge (`.DS_Store`, `Thumbs.db`, `Desktop.ini`, `*.tmp`, `*.bak`) with live progress and completion details dialog.
+  - **Tab 2: Network & Security Diagnostics:** WebUI 4-digit security PIN manager with 1-tap regenerate (`AuthHelper.generateNewPin()`), multi-adapter network inspector with primary IP selector (Wi-Fi, Hotspot, USB Tethering, Ethernet), live throughput monitor with counter reset (`TrafficMonitor.reset()`), and AirPlay/DLNA device discovery.
+- **Home Dashboard & Navigation Integration:**
+  - Added persistent `ServerDashboardCard` at the top of the Android home screen with pulsing status, active local IP pill, 1-tap URL copy, quick QR dialog, and server toggle switch.
+  - Added 1-tap quick action chips on `ServerDashboardCard` for `Proxy :8081` and `Storage Cleaner`.
+  - Updated TopAppBar action icon from generic Settings to `Icons.Default.Build` ("Tools & Proxy Hub").
+
+### 🔐 Barcode / QR Dialog Login Credentials & Auto-Login
+- **Frictionless QR Auto-Login:**
+  - Encoded auto-login query parameter (`/?pin=$pin`) into the generated QR code.
+  - WebUI `script.js` intercepts `?pin=...` during `DOMContentLoaded`, verifies with `/api/auth` to set an authenticated `HttpOnly` session cookie, and cleans the browser URL bar with `history.replaceState` to protect credentials.
+  - Mobile phone and tablet camera scans now authenticate automatically with **zero login popups**.
+- **Dedicated Login Credentials Card:**
+  - Added clear credentials section directly on `QuickQrDialog`: Username `admin` (with 1-tap copy) and bold 4-digit PIN badge (with 1-tap copy and 1-tap regenerate button) for manual entry on desktop browsers.
+
+### 🌐 Web Dashboard UX Streamlining
+- **Thumbnail Acceleration:**
+  - List and grid views now query `/api/thumbnail` for instantaneous directory rendering without downloading multi-megabyte camera RAW/JPEG originals.
+- **Desktop-Grade Interactions:**
+  - Replaced clutter of 6 colored badge buttons per row with a streamlined hover action set + `•••` action dropdown.
+  - Added full desktop-grade right-click context menu across table rows and grid cards.
+  - Added true "Rename" modal connected to `/api/rename` and "Extract ZIP" button wired to `/api/unzip`.
+  - Added Shift-click range multi-selection for bulk operations.
+  - Added real-time device storage usage meter in header using Android `StatFs`.
+  - Replaced platform-inconsistent emojis with crisp vector SVG icons and modern glassmorphic card styling.
+
+### 📱 Android Native Experience Polish
+- **Sorting & Media Deletion Polish:**
+  - Fixed sorting comparator in `FileBrowserViewModel.kt` so directories remain pinned to the top across all sort modes (Name, Size, Date - ascending & descending).
+  - Deleting an image in fullscreen `PreviewScreen.kt` now transitions smoothly to the adjacent photo instead of ejecting back to the root list.
+  - Added native "New Folder", "Rename", and "Properties" dialogs to Compose UI.
+  - Added color-coded semantic file-type badges (PDF red, Audio purple, Archive orange, Code teal, APK green, Doc blue).
+  - Integrated `PremiumSlideshowScreen.kt` with parallax transitions, timer selector, and presentation controls into PreviewScreen & mini-player.
+
 ## [2.0.0] - 2026-09-09
 
 ### 🎨 Rebranding & Ecosystem Integration

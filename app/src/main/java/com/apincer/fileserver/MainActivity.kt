@@ -35,6 +35,28 @@ import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.QrCode2
+import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.Language
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.filled.Build
+import androidx.compose.material.icons.filled.VpnKey
+import androidx.compose.material.icons.filled.CleaningServices
+import androidx.compose.material.icons.filled.DeleteSweep
+import androidx.compose.material.icons.filled.Security
+import androidx.compose.material.icons.filled.Router
+import androidx.compose.material.icons.filled.Storage
+import androidx.compose.material.icons.filled.Cast
+import androidx.compose.material.icons.filled.Wifi
+import androidx.compose.material.icons.filled.WifiTethering
+import androidx.compose.material.icons.filled.Usb
+import androidx.compose.material.icons.filled.Cable
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -127,6 +149,7 @@ fun formatBytes(bytes: Long): String {
 @Composable
 fun WebFSScreen() {
     var showHostTools by remember { mutableStateOf(false) }
+    var hostToolsInitialTab by remember { mutableStateOf(0) }
     val viewModel: FileBrowserViewModel = viewModel()
     val files by viewModel.files.collectAsState()
     
@@ -144,256 +167,41 @@ fun WebFSScreen() {
         onDispose { castingManager.stopDiscovery() }
     }
 
-    val slideshowActive by CastingState.slideshowActive.collectAsState()
-    val slideshowSlides by CastingState.slides.collectAsState()
-    val slideshowIndex by CastingState.currentIndex.collectAsState()
-    val slideshowPlaying by CastingState.isPlaying.collectAsState()
-    val slideshowTimer by CastingState.timerSeconds.collectAsState()
-    val showCastSheet by CastingState.showCastSheet.collectAsState()
-
-    val activeCaster by CastingState.activeCaster.collectAsState()
-
-    // Global Auto-advance timer
-    LaunchedEffect(slideshowActive, slideshowPlaying, slideshowIndex, slideshowTimer) {
-        if (slideshowActive && slideshowPlaying && slideshowSlides.isNotEmpty()) {
-            kotlinx.coroutines.delay(slideshowTimer * 1000L)
-            CastingState.currentIndex.value = (slideshowIndex + 1) % slideshowSlides.size
-        }
-    }
-
-    // Global Cast image when page changes
-    LaunchedEffect(slideshowActive, slideshowIndex, activeCaster) {
-        if (slideshowActive && slideshowSlides.isNotEmpty()) {
-            activeCaster?.let { caster ->
-                val slide = slideshowSlides[slideshowIndex]
-                val bytes = slide.fetchImageBytes?.invoke()
-                caster.showImage(slide.imageUrl, bytes)
-            }
-        }
-    }
-
-
-    if (showHostTools) {
-        Dialog(
-            onDismissRequest = { showHostTools = false },
-            properties = DialogProperties(usePlatformDefaultWidth = false)
-        ) {
-            HostAndToolsContent(onClose = { showHostTools = false })
-        }
-    }
-
-    Scaffold(
-        topBar = {
-            Column(
-                modifier = Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface)
-            ) {
-                TopAppBar(
-                    title = { Text("File Mate", fontWeight = FontWeight.Bold) },
-                    navigationIcon = {
-                        IconButton(onClick = { viewModel.navigateUp() }) {
-                            Icon(Icons.Default.ArrowBack, contentDescription = "Up")
-                        }
-                    },
-                    actions = {
-                        val isListView by viewModel.isListView.collectAsState()
-                        com.apincer.fileserver.ui.UnifiedCastButton()
-                        IconButton(onClick = { viewModel.toggleViewMode() }) {
-                            Icon(if (isListView) Icons.Default.GridView else Icons.Default.List, contentDescription = "Toggle View")
-                        }
-                        IconButton(onClick = { showHostTools = true }) {
-                            Icon(Icons.Default.Settings, contentDescription = "Host & Tools")
-                        }
-                    },
-                    colors = TopAppBarDefaults.topAppBarColors(
-                        containerColor = Color.Transparent,
-                        titleContentColor = MaterialTheme.colorScheme.onSurface,
-                        actionIconContentColor = MaterialTheme.colorScheme.primary
-                    )
-                )
-                
-            }
-        }
-    ) { paddingValues ->
-        Box(modifier = Modifier.padding(paddingValues)) {
-            val hasFloatingMiniPlayer = slideshowActive && previewIndex == null && slideshowSlides.isNotEmpty()
-            FileBrowserScreen(
-                viewModel = viewModel,
-                bottomPadding = if (hasFloatingMiniPlayer) 88.dp else 8.dp,
-                onFileClick = { fileItem -> 
-                    val ext = fileItem.name.substringAfterLast('.', "").lowercase()
-
-                    val textExtensions = listOf("txt", "md", "json", "xml", "html", "css", "js", "kt", "java", "csv", "log")
-                    if (fileItem.mimeType.startsWith("text/") || ext in textExtensions) {
-                        editorFileItem = fileItem
-                    } else {
-                        val mediaFiles = files.filter { !it.isDirectory && !(it.mimeType.startsWith("text/") || it.name.substringAfterLast('.', "").lowercase() in textExtensions) }
-                        val targetIndex = mediaFiles.indexOf(fileItem).takeIf { it >= 0 } ?: 0
-                        CastingState.currentIndex.value = targetIndex
-                        CastingState.isPlaying.value = false
-                        previewIndex = targetIndex
-                    }
-                }
-            )
-        }
-    }
-
-    previewIndex?.let { index ->
-        val textExts = listOf("txt", "md", "json", "xml", "html", "css", "js", "kt", "java", "csv", "log")
-        val mediaFiles = files.filter { !it.isDirectory && !(it.mimeType.startsWith("text/") || it.name.substringAfterLast('.', "").lowercase() in textExts) }
-        LaunchedEffect(mediaFiles) {
-            val primaryIp = com.apincer.fileserver.getLocalIpAddresses().firstOrNull() ?: "127.0.0.1"
-            val slides = mediaFiles.map { file ->
-                com.apincer.fileserver.ui.SlideItem(
-                    id = file.path,
-                    imageUrl = "http://$primaryIp:8080/files/${file.path}",
-                    title = file.name,
-                    description = "${file.size / 1024} KB",
-                    fetchImageBytes = {
-                        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-                            try { file.file.readBytes() } catch (e: Exception) { null }
-                        }
-                    }
-                )
-            }
-            CastingState.slides.value = slides
-            CastingState.slideshowActive.value = true
-        }
-        PreviewScreen(
-            initialIndex = index,
-            mediaFiles = mediaFiles,
-            onClose = { 
-                previewIndex = null 
-                CastingState.isPlaying.value = false
-            },
-            discoveredDevices = discoveredDevices,
-            onFileDeleted = { 
-                viewModel.loadDirectory(viewModel.currentPath.value) 
-                previewIndex = null
-                CastingState.isPlaying.value = false
-            },
-            onFileResized = {
-                viewModel.loadDirectory(viewModel.currentPath.value) 
-            }
-        )
-    }
-    
-    editorFileItem?.let { fileItem ->
-        TextEditorScreen(
-            fileItem = fileItem,
-            onClose = { editorFileItem = null }
-        )
-    }
-
-    if (slideshowActive && previewIndex == null && slideshowSlides.isNotEmpty()) {
-        val currentSlide = slideshowSlides[slideshowIndex]
-        Box(
-            modifier = Modifier.fillMaxSize().padding(bottom = 16.dp, start = 16.dp, end = 16.dp),
-            contentAlignment = Alignment.BottomCenter
-        ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(16.dp))
-                    .background(MaterialTheme.colorScheme.surfaceVariant)
-                    .clickable { previewIndex = CastingState.currentIndex.value }
-                    .padding(12.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                AsyncImage(
-                    model = java.io.File(currentSlide.id),
-                    contentDescription = null,
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier.size(48.dp).clip(RoundedCornerShape(8.dp))
-                )
-                Spacer(modifier = Modifier.width(12.dp))
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(currentSlide.title, style = MaterialTheme.typography.bodyMedium, maxLines = 1)
-                    Text(if (activeCaster != null) "Casting to ${activeCaster?.deviceName}" else "Local Slideshow", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
-                }
-                IconButton(onClick = { CastingState.isPlaying.value = !slideshowPlaying }) {
-                    Icon(if (slideshowPlaying) Icons.Default.Pause else Icons.Default.PlayArrow, contentDescription = "Play/Pause")
-                }
-                IconButton(onClick = { 
-                    CastingState.slideshowActive.value = false
-                    CastingState.isPlaying.value = false
-                    coroutineScope.launch { CastingState.activeCaster.value?.stop() }
-                }) {
-                    Icon(Icons.Default.Close, contentDescription = "Stop")
-                }
-            }
-        }
-    }
-    if (showCastSheet) {
-        com.apincer.fileserver.ui.UnifiedCastSheet(
-
-            discoveredDevices = discoveredDevices,
-            onDismiss = { CastingState.showCastSheet.value = false }
-        )
-    }
-
-}
-
-@Composable
-fun HostAndToolsContent(onClose: () -> Unit) {
-    val context = LocalContext.current
-    var isServerRunning by remember { mutableStateOf(FileServerService.isRunning) }
-
-    val webfsRx by TrafficMonitor.webfsRxBytes.collectAsState()
-    val webfsTx by TrafficMonitor.webfsTxBytes.collectAsState()
-    val proxyRx by TrafficMonitor.proxyRxBytes.collectAsState()
-    val proxyTx by TrafficMonitor.proxyTxBytes.collectAsState()
-
+    val isServerRunning by FileServerService.isRunningFlow.collectAsState()
     var networkAddresses by remember { mutableStateOf(NetworkUtils.getLocalNetworkAddresses()) }
     var selectedIpIndex by remember { mutableStateOf(0) }
     val primaryIp = networkAddresses.getOrNull(selectedIpIndex)?.ip
         ?: networkAddresses.firstOrNull()?.ip
         ?: "127.0.0.1"
-    val qrCodeBitmap = remember(primaryIp) { generateQrCode("http://$primaryIp:8080") }
+
+    val currentPin by AuthHelper.currentPin.collectAsState()
+    var showQuickQrDialog by remember { mutableStateOf(false) }
+    var showSlideshowScreen by remember { mutableStateOf(false) }
 
     val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner, context) {
         fun refreshAddresses() {
             networkAddresses = NetworkUtils.getLocalNetworkAddresses()
-            if (selectedIpIndex >= networkAddresses.size) {
-                selectedIpIndex = 0
-            }
+            if (selectedIpIndex >= networkAddresses.size) selectedIpIndex = 0
         }
-
         val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
             if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
-                isServerRunning = FileServerService.isRunning
                 refreshAddresses()
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
-
         val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? android.net.ConnectivityManager
         val callback = object : android.net.ConnectivityManager.NetworkCallback() {
-            override fun onAvailable(network: android.net.Network) {
-                refreshAddresses()
-            }
-            override fun onLost(network: android.net.Network) {
-                refreshAddresses()
-            }
-            override fun onCapabilitiesChanged(network: android.net.Network, networkCapabilities: android.net.NetworkCapabilities) {
-                refreshAddresses()
-            }
-            override fun onLinkPropertiesChanged(network: android.net.Network, linkProperties: android.net.LinkProperties) {
-                refreshAddresses()
-            }
+            override fun onAvailable(network: android.net.Network) { refreshAddresses() }
+            override fun onLost(network: android.net.Network) { refreshAddresses() }
+            override fun onCapabilitiesChanged(network: android.net.Network, networkCapabilities: android.net.NetworkCapabilities) { refreshAddresses() }
+            override fun onLinkPropertiesChanged(network: android.net.Network, linkProperties: android.net.LinkProperties) { refreshAddresses() }
         }
         val request = android.net.NetworkRequest.Builder().build()
-        try {
-            cm?.registerNetworkCallback(request, callback)
-        } catch (e: Exception) {
-            android.util.Log.w("MainActivity", "Failed to register network callback", e)
-        }
-
+        try { cm?.registerNetworkCallback(request, callback) } catch (e: Exception) {}
         onDispose {
             lifecycleOwner.lifecycle.removeObserver(observer)
-            try {
-                cm?.unregisterNetworkCallback(callback)
-            } catch (e: Exception) {}
+            try { cm?.unregisterNetworkCallback(callback) } catch (e: Exception) {}
         }
     }
 
@@ -419,7 +227,6 @@ fun HostAndToolsContent(onClose: () -> Unit) {
         } else {
             context.startService(intent)
         }
-        isServerRunning = true
     }
 
     val manageStorageLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
@@ -451,27 +258,866 @@ fun HostAndToolsContent(onClose: () -> Unit) {
             action = "STOP"
         }
         context.startService(intent)
-        isServerRunning = false
         networkAddresses = NetworkUtils.getLocalNetworkAddresses()
         if (selectedIpIndex >= networkAddresses.size) selectedIpIndex = 0
     }
 
+    val slideshowActive by CastingState.slideshowActive.collectAsState()
+    val slideshowSlides by CastingState.slides.collectAsState()
+    val slideshowIndex by CastingState.currentIndex.collectAsState()
+    val slideshowPlaying by CastingState.isPlaying.collectAsState()
+    val slideshowTimer by CastingState.timerSeconds.collectAsState()
+    val showCastSheet by CastingState.showCastSheet.collectAsState()
 
+    val activeCaster by CastingState.activeCaster.collectAsState()
 
-    val scrollState = rememberScrollState()
+    // Global Auto-advance timer
+    LaunchedEffect(slideshowActive, slideshowPlaying, slideshowIndex, slideshowTimer) {
+        if (slideshowActive && slideshowPlaying && slideshowSlides.isNotEmpty()) {
+            kotlinx.coroutines.delay(slideshowTimer * 1000L)
+            CastingState.currentIndex.value = (slideshowIndex + 1) % slideshowSlides.size
+        }
+    }
 
-    val infiniteTransition = rememberInfiniteTransition(label = "pulse")
+    // Global Cast image when page changes
+    LaunchedEffect(slideshowActive, slideshowIndex, activeCaster) {
+        if (slideshowActive && slideshowSlides.isNotEmpty()) {
+            activeCaster?.let { caster ->
+                val slide = slideshowSlides[slideshowIndex]
+                val bytes = slide.fetchImageBytes?.invoke()
+                caster.showImage(slide.imageUrl, bytes)
+            }
+        }
+    }
+
+    if (showPermissionRationale) {
+        AlertDialog(
+            onDismissRequest = { showPermissionRationale = false },
+            title = { Text("Permission Required") },
+            text = { Text("File Mate needs 'All files access' permission to serve files from your device storage to your local network.") },
+            confirmButton = {
+                Button(onClick = {
+                    showPermissionRationale = false
+                    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
+                        try {
+                            val intent = Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION).apply {
+                                data = Uri.parse("package:${context.packageName}")
+                            }
+                            manageStorageLauncher.launch(intent)
+                        } catch (e: Exception) {
+                            val intent = Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION)
+                            manageStorageLauncher.launch(intent)
+                        }
+                    }
+                }) {
+                    Text("Grant Permission")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showPermissionRationale = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
+    if (showQuickQrDialog) {
+        QuickQrDialog(
+            url = "http://$primaryIp:8080",
+            pin = currentPin,
+            onDismiss = { showQuickQrDialog = false }
+        )
+    }
+
+    if (showSlideshowScreen) {
+        Dialog(
+            onDismissRequest = { showSlideshowScreen = false },
+            properties = DialogProperties(
+                usePlatformDefaultWidth = false,
+                dismissOnBackPress = true,
+                decorFitsSystemWindows = false
+            )
+        ) {
+            com.apincer.fileserver.ui.PremiumSlideshowScreen(
+                discoveredDevices = discoveredDevices,
+                onClose = { showSlideshowScreen = false }
+            )
+        }
+    }
+
+    if (showHostTools) {
+        Dialog(
+            onDismissRequest = { showHostTools = false },
+            properties = DialogProperties(usePlatformDefaultWidth = false)
+        ) {
+            ToolsAndProxyHubContent(
+                initialTab = hostToolsInitialTab,
+                onClose = { showHostTools = false }
+            )
+        }
+    }
+
+    Scaffold(
+        topBar = {
+            Column(
+                modifier = Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface)
+            ) {
+                TopAppBar(
+                    title = { Text("File Mate", fontWeight = FontWeight.Bold) },
+                    navigationIcon = {
+                        IconButton(onClick = { viewModel.navigateUp() }) {
+                            Icon(Icons.Default.ArrowBack, contentDescription = "Up")
+                        }
+                    },
+                    actions = {
+                        val isListView by viewModel.isListView.collectAsState()
+                        com.apincer.fileserver.ui.UnifiedCastButton()
+                        IconButton(onClick = { viewModel.toggleViewMode() }) {
+                            Icon(if (isListView) Icons.Default.GridView else Icons.Default.List, contentDescription = "Toggle View")
+                        }
+                        IconButton(onClick = { 
+                            hostToolsInitialTab = 0
+                            showHostTools = true 
+                        }) {
+                            Icon(Icons.Default.Build, contentDescription = "Tools & Proxy Hub")
+                        }
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = Color.Transparent,
+                        titleContentColor = MaterialTheme.colorScheme.onSurface,
+                        actionIconContentColor = MaterialTheme.colorScheme.primary
+                    )
+                )
+                
+            }
+        }
+    ) { paddingValues ->
+        Box(modifier = Modifier.padding(paddingValues)) {
+            val hasFloatingMiniPlayer = slideshowActive && previewIndex == null && slideshowSlides.isNotEmpty()
+            Column(modifier = Modifier.fillMaxSize()) {
+                ServerDashboardCard(
+                    isRunning = isServerRunning,
+                    primaryIp = primaryIp,
+                    networkAddresses = networkAddresses,
+                    selectedIpIndex = selectedIpIndex,
+                    onSelectIpIndex = { selectedIpIndex = it },
+                    onToggleServer = { shouldRun ->
+                        if (shouldRun) {
+                            requestAllFilesAccessAndStart()
+                        } else {
+                            stopServer()
+                        }
+                    },
+                    onShowQr = { showQuickQrDialog = true },
+                    onOpenTools = { tab ->
+                        hostToolsInitialTab = tab
+                        showHostTools = true
+                    }
+                )
+
+                FileBrowserScreen(
+                    viewModel = viewModel,
+                    modifier = Modifier.weight(1f),
+                    bottomPadding = if (hasFloatingMiniPlayer) 88.dp else 8.dp,
+                    onFileClick = { fileItem -> 
+                        val ext = fileItem.name.substringAfterLast('.', "").lowercase()
+
+                        val textExtensions = listOf("txt", "md", "json", "xml", "html", "css", "js", "kt", "java", "csv", "log")
+                        if (fileItem.mimeType.startsWith("text/") || ext in textExtensions) {
+                            editorFileItem = fileItem
+                        } else {
+                            val mediaFiles = files.filter { !it.isDirectory && !(it.mimeType.startsWith("text/") || it.name.substringAfterLast('.', "").lowercase() in textExtensions) }
+                            val targetIndex = mediaFiles.indexOf(fileItem).takeIf { it >= 0 } ?: 0
+                            CastingState.currentIndex.value = targetIndex
+                            CastingState.isPlaying.value = false
+                            previewIndex = targetIndex
+                        }
+                    }
+                )
+            }
+        }
+    }
+
+    previewIndex?.let { index ->
+        val textExts = listOf("txt", "md", "json", "xml", "html", "css", "js", "kt", "java", "csv", "log")
+        val mediaFiles = files.filter { !it.isDirectory && !(it.mimeType.startsWith("text/") || it.name.substringAfterLast('.', "").lowercase() in textExts) }
+        LaunchedEffect(mediaFiles) {
+            val primary = com.apincer.fileserver.getLocalIpAddresses().firstOrNull() ?: "127.0.0.1"
+            val slides = mediaFiles.map { file ->
+                com.apincer.fileserver.ui.SlideItem(
+                    id = file.path,
+                    imageUrl = "http://$primary:8080/files/${file.path}",
+                    title = file.name,
+                    description = "${file.size / 1024} KB",
+                    fetchImageBytes = {
+                        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                            try { file.file.readBytes() } catch (e: Exception) { null }
+                        }
+                    }
+                )
+            }
+            CastingState.slides.value = slides
+            CastingState.slideshowActive.value = true
+        }
+        PreviewScreen(
+            initialIndex = index,
+            mediaFiles = mediaFiles,
+            onClose = { 
+                previewIndex = null 
+                CastingState.isPlaying.value = false
+            },
+            discoveredDevices = discoveredDevices,
+            onFileDeleted = { deletedIndex -> 
+                viewModel.loadDirectory(viewModel.currentPath.value) 
+                val remainingSize = mediaFiles.size - 1
+                if (remainingSize <= 0) {
+                    previewIndex = null
+                    CastingState.isPlaying.value = false
+                } else {
+                    val nextIndex = if (deletedIndex >= remainingSize) remainingSize - 1 else deletedIndex
+                    previewIndex = nextIndex
+                    CastingState.currentIndex.value = nextIndex
+                }
+            },
+            onFileResized = {
+                viewModel.loadDirectory(viewModel.currentPath.value) 
+            },
+            onStartSlideshow = {
+                showSlideshowScreen = true
+            }
+        )
+    }
+    
+    editorFileItem?.let { fileItem ->
+        TextEditorScreen(
+            fileItem = fileItem,
+            onClose = { editorFileItem = null }
+        )
+    }
+
+    if (slideshowActive && previewIndex == null && slideshowSlides.isNotEmpty()) {
+        val currentSlide = slideshowSlides[slideshowIndex]
+        Box(
+            modifier = Modifier.fillMaxSize().padding(bottom = 16.dp, start = 16.dp, end = 16.dp),
+            contentAlignment = Alignment.BottomCenter
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(MaterialTheme.colorScheme.surfaceVariant)
+                    .clickable { showSlideshowScreen = true }
+                    .padding(12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                AsyncImage(
+                    model = java.io.File(currentSlide.id),
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.size(48.dp).clip(RoundedCornerShape(8.dp))
+                )
+                Spacer(modifier = Modifier.width(12.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(currentSlide.title, style = MaterialTheme.typography.bodyMedium, maxLines = 1)
+                    Text(if (activeCaster != null) "Casting to ${activeCaster?.deviceName}" else "Local Slideshow", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+                }
+                IconButton(onClick = { CastingState.isPlaying.value = !slideshowPlaying }) {
+                    Icon(if (slideshowPlaying) Icons.Default.Pause else Icons.Default.PlayArrow, contentDescription = "Play/Pause")
+                }
+                IconButton(onClick = { 
+                    CastingState.slideshowActive.value = false
+                    CastingState.isPlaying.value = false
+                    coroutineScope.launch { CastingState.activeCaster.value?.stop() }
+                }) {
+                    Icon(Icons.Default.Close, contentDescription = "Stop")
+                }
+            }
+        }
+    }
+    if (showCastSheet) {
+        com.apincer.fileserver.ui.UnifiedCastSheet(
+            discoveredDevices = discoveredDevices,
+            onDismiss = { CastingState.showCastSheet.value = false }
+        )
+    }
+
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun ServerDashboardCard(
+    isRunning: Boolean,
+    primaryIp: String,
+    networkAddresses: List<NetworkAddressInfo>,
+    selectedIpIndex: Int,
+    onSelectIpIndex: (Int) -> Unit,
+    onToggleServer: (Boolean) -> Unit,
+    onShowQr: () -> Unit,
+    onOpenTools: (Int) -> Unit = {},
+    modifier: Modifier = Modifier
+) {
+    val context = LocalContext.current
+    val clipboardManager = androidx.compose.ui.platform.LocalClipboardManager.current
+    var isExpanded by remember { mutableStateOf(false) }
+
+    val infiniteTransition = rememberInfiniteTransition(label = "server_status_pulse")
+    val pulseAlpha by infiniteTransition.animateFloat(
+        initialValue = 0.6f,
+        targetValue = 0f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1200, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "pulseAlpha"
+    )
     val pulseScale by infiniteTransition.animateFloat(
         initialValue = 1f,
-        targetValue = 1.35f,
+        targetValue = 2.2f,
         animationSpec = infiniteRepeatable(
-            animation = tween(900, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Reverse
+            animation = tween(1200, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Restart
         ),
-        label = "scale"
+        label = "pulseScale"
     )
 
-    var selectedTab by remember { mutableStateOf(0) }
+    Card(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp, vertical = 6.dp),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)
+        ),
+        border = androidx.compose.foundation.BorderStroke(
+            width = 1.dp,
+            color = if (isRunning) MaterialTheme.colorScheme.primary.copy(alpha = 0.35f) else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+        )
+    ) {
+        Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
+            // Main Top Row
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // Status indicator dot
+                Box(
+                    modifier = Modifier.size(20.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    if (isRunning) {
+                        Box(
+                            modifier = Modifier
+                                .size(10.dp)
+                                .graphicsLayer {
+                                    scaleX = pulseScale
+                                    scaleY = pulseScale
+                                    alpha = pulseAlpha
+                                }
+                                .background(Color(0xFF4CAF50), CircleShape)
+                        )
+                        Box(
+                            modifier = Modifier
+                                .size(10.dp)
+                                .background(Color(0xFF4CAF50), CircleShape)
+                        )
+                    } else {
+                        Box(
+                            modifier = Modifier
+                                .size(10.dp)
+                                .background(Color.Gray.copy(alpha = 0.6f), CircleShape)
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.width(8.dp))
+
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = if (isRunning) "Server Active" else "Server Offline",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = if (isRunning) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Text(
+                        text = if (isRunning) "Ready for browser connections" else "Turn on to share files on Wi-Fi",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1
+                    )
+                }
+
+                if (isRunning) {
+                    IconButton(
+                        onClick = onShowQr,
+                        modifier = Modifier.size(36.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.QrCode2,
+                            contentDescription = "Show QR Code",
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(4.dp))
+                } else {
+                    IconButton(
+                        onClick = { onOpenTools(1) },
+                        modifier = Modifier.size(36.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Build,
+                            contentDescription = "Open Tools & Storage Cleaner",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(4.dp))
+                }
+
+                Switch(
+                    checked = isRunning,
+                    onCheckedChange = onToggleServer,
+                    modifier = Modifier.scale(0.85f)
+                )
+
+                if (isRunning && networkAddresses.size > 1) {
+                    IconButton(
+                        onClick = { isExpanded = !isExpanded },
+                        modifier = Modifier.size(32.dp)
+                    ) {
+                        Icon(
+                            imageVector = if (isExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                            contentDescription = "Toggle Network Details",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
+
+            // URL Pill Row when server is running
+            AnimatedVisibility(visible = isRunning) {
+                Column(modifier = Modifier.padding(top = 8.dp)) {
+                    val serverUrl = "http://$primaryIp:8080"
+                    Surface(
+                        shape = RoundedCornerShape(10.dp),
+                        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                clipboardManager.setText(androidx.compose.ui.text.AnnotatedString(serverUrl))
+                                Toast.makeText(context, "Copied $serverUrl", Toast.LENGTH_SHORT).show()
+                            }
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Language,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = serverUrl,
+                                style = MaterialTheme.typography.labelLarge,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.weight(1f)
+                            )
+                            Icon(
+                                imageVector = Icons.Default.ContentCopy,
+                                contentDescription = "Copy URL",
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
+                    }
+
+                    // Quick Tool Access Chips
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 8.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
+                            modifier = Modifier
+                                .weight(1f)
+                                .clickable { onOpenTools(0) }
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.VpnKey,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(13.dp)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = "Proxy :8081",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                            }
+                        }
+
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = MaterialTheme.colorScheme.secondary.copy(alpha = 0.12f),
+                            modifier = Modifier
+                                .weight(1f)
+                                .clickable { onOpenTools(1) }
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.CleaningServices,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.secondary,
+                                    modifier = Modifier.size(13.dp)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = "Storage Cleaner",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.secondary
+                                )
+                            }
+                        }
+                    }
+
+                    // Expanded: multiple network interfaces
+                    if (isExpanded && networkAddresses.size > 1) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = "Select Network Interface:",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            items(networkAddresses.indices.toList()) { idx ->
+                                val net = networkAddresses[idx]
+                                FilterChip(
+                                    selected = idx == selectedIpIndex,
+                                    onClick = { onSelectIpIndex(idx) },
+                                    label = { Text("${net.displayName} (${net.ip})", style = MaterialTheme.typography.labelSmall) }
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun QuickQrDialog(
+    url: String,
+    pin: String = AuthHelper.currentPin.value,
+    onDismiss: () -> Unit
+) {
+    val context = LocalContext.current
+    val clipboardManager = androidx.compose.ui.platform.LocalClipboardManager.current
+    val livePin by AuthHelper.currentPin.collectAsState()
+    val activePin = if (livePin.isNotEmpty()) livePin else pin
+
+    // Auto-login URL encoded into the QR code
+    val qrConnectUrl = if (activePin.isNotEmpty()) "$url/?pin=$activePin" else url
+    val qrBitmap = remember(qrConnectUrl) { generateQrCode(qrConnectUrl, 600) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Default.QrCode2,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Scan to Connect", fontWeight = FontWeight.Bold)
+                }
+                Surface(
+                    shape = RoundedCornerShape(6.dp),
+                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
+                ) {
+                    Text(
+                        text = "Port 8080",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.primary,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                    )
+                }
+            }
+        },
+        text = {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                if (qrBitmap != null) {
+                    Box(
+                        modifier = Modifier
+                            .padding(vertical = 4.dp)
+                            .clip(RoundedCornerShape(16.dp))
+                            .background(Color.White)
+                            .padding(12.dp)
+                    ) {
+                        Image(
+                            bitmap = qrBitmap.asImageBitmap(),
+                            contentDescription = "QR Code",
+                            modifier = Modifier.size(190.dp)
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(6.dp))
+
+                // Direct Web URL Surface with 1-tap copy
+                Surface(
+                    shape = RoundedCornerShape(10.dp),
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable {
+                            clipboardManager.setText(AnnotatedString(url))
+                            Toast.makeText(context, "Copied $url", Toast.LENGTH_SHORT).show()
+                        }
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                            Icon(
+                                imageVector = Icons.Default.Language,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = url,
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary,
+                                maxLines = 1
+                            )
+                        }
+                        Icon(
+                            imageVector = Icons.Default.ContentCopy,
+                            contentDescription = "Copy",
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+                }
+
+                // Login Credentials Card
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 10.dp)
+                ) {
+                    Column(modifier = Modifier.padding(12.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    imageVector = Icons.Default.Lock,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(14.dp)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = "LOGIN CREDENTIALS",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            Surface(
+                                shape = RoundedCornerShape(4.dp),
+                                color = Color(0xFF10B981).copy(alpha = 0.15f)
+                            ) {
+                                Text(
+                                    text = "⚡ In QR Code",
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = Color(0xFF10B981),
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            // Username
+                            Column {
+                                Text(
+                                    text = "Username",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Surface(
+                                    shape = RoundedCornerShape(6.dp),
+                                    color = MaterialTheme.colorScheme.surface.copy(alpha = 0.7f),
+                                    modifier = Modifier.clickable {
+                                        clipboardManager.setText(AnnotatedString("admin"))
+                                        Toast.makeText(context, "Copied username 'admin'", Toast.LENGTH_SHORT).show()
+                                    }
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Text(
+                                            text = "admin",
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            fontWeight = FontWeight.Bold,
+                                            color = MaterialTheme.colorScheme.onSurface
+                                        )
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Icon(
+                                            imageVector = Icons.Default.ContentCopy,
+                                            contentDescription = "Copy",
+                                            tint = MaterialTheme.colorScheme.primary,
+                                            modifier = Modifier.size(12.dp)
+                                        )
+                                    }
+                                }
+                            }
+
+                            // PIN
+                            Column(horizontalAlignment = Alignment.End) {
+                                Text(
+                                    text = "PIN (Password)",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Surface(
+                                        shape = RoundedCornerShape(6.dp),
+                                        color = MaterialTheme.colorScheme.primaryContainer,
+                                        modifier = Modifier.clickable {
+                                            clipboardManager.setText(AnnotatedString(activePin))
+                                            Toast.makeText(context, "Copied PIN $activePin", Toast.LENGTH_SHORT).show()
+                                        }
+                                    ) {
+                                        Row(
+                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Text(
+                                                text = activePin.chunked(1).joinToString(" "),
+                                                style = MaterialTheme.typography.bodyMedium,
+                                                fontWeight = FontWeight.ExtraBold,
+                                                color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                                letterSpacing = 1.sp
+                                            )
+                                            Spacer(modifier = Modifier.width(4.dp))
+                                            Icon(
+                                                imageVector = Icons.Default.ContentCopy,
+                                                contentDescription = "Copy PIN",
+                                                tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                                                modifier = Modifier.size(12.dp)
+                                            )
+                                        }
+                                    }
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    IconButton(
+                                        onClick = {
+                                            AuthHelper.generateNewPin()
+                                            Toast.makeText(context, "New PIN generated!", Toast.LENGTH_SHORT).show()
+                                        },
+                                        modifier = Modifier.size(28.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Refresh,
+                                            contentDescription = "Regenerate PIN",
+                                            tint = MaterialTheme.colorScheme.primary,
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                Text(
+                    text = "📱 Camera scan connects automatically with zero login prompts. When entering URL manually on PC, enter username 'admin' and the PIN above.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center
+                )
+            }
+        },
+        confirmButton = {
+            Button(onClick = onDismiss) {
+                Text("Done")
+            }
+        }
+    )
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun ToolsAndProxyHubContent(
+    initialTab: Int = 0,
+    onClose: () -> Unit
+) {
+    val context = LocalContext.current
+    val clipboardManager = androidx.compose.ui.platform.LocalClipboardManager.current
+    var isServerRunning by remember { mutableStateOf(FileServerService.isRunning) }
+
+    val webfsRx by TrafficMonitor.webfsRxBytes.collectAsState()
+    val webfsTx by TrafficMonitor.webfsTxBytes.collectAsState()
+    val proxyRx by TrafficMonitor.proxyRxBytes.collectAsState()
+    val proxyTx by TrafficMonitor.proxyTxBytes.collectAsState()
+
+    var networkAddresses by remember { mutableStateOf(NetworkUtils.getLocalNetworkAddresses()) }
+    var selectedIpIndex by remember { mutableStateOf(0) }
+    val primaryIp = networkAddresses.getOrNull(selectedIpIndex)?.ip
+        ?: networkAddresses.firstOrNull()?.ip
+        ?: "127.0.0.1"
+
+    val currentPin by AuthHelper.currentPin.collectAsState()
+    var selectedTab by remember { mutableStateOf(initialTab) }
     val coroutineScope = rememberCoroutineScope()
     var isCleaning by remember { mutableStateOf(false) }
     var cleaningStatus by remember { mutableStateOf("") }
@@ -480,14 +1126,65 @@ fun HostAndToolsContent(onClose: () -> Unit) {
     var resultTitle by remember { mutableStateOf("") }
     var resultSummary by remember { mutableStateOf("") }
     var resultItems by remember { mutableStateOf<List<String>>(emptyList()) }
-    
-    val currentPin by AuthHelper.currentPin.collectAsState()
+
+    var storageRefreshTrigger by remember { mutableStateOf(0) }
+    val storageStats = remember(storageRefreshTrigger) {
+        try {
+            val root = Environment.getExternalStorageDirectory()
+            val stat = android.os.StatFs(root.path)
+            val blockSize = stat.blockSizeLong
+            val totalBytes = stat.blockCountLong * blockSize
+            val freeBytes = stat.availableBlocksLong * blockSize
+            Pair(freeBytes, totalBytes)
+        } catch (e: Exception) {
+            Pair(0L, 0L)
+        }
+    }
+
     val castingManager = remember { CastingManager(context) }
     val discoveredDevices by castingManager.devices.collectAsState()
+    val activeCaster by CastingState.activeCaster.collectAsState()
 
-    DisposableEffect(Unit) {
+    val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner, context) {
+        fun refreshAddresses() {
+            networkAddresses = NetworkUtils.getLocalNetworkAddresses()
+            if (selectedIpIndex >= networkAddresses.size) {
+                selectedIpIndex = 0
+            }
+        }
+
+        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+            if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
+                isServerRunning = FileServerService.isRunning
+                refreshAddresses()
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+
+        val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? android.net.ConnectivityManager
+        val callback = object : android.net.ConnectivityManager.NetworkCallback() {
+            override fun onAvailable(network: android.net.Network) { refreshAddresses() }
+            override fun onLost(network: android.net.Network) { refreshAddresses() }
+            override fun onCapabilitiesChanged(network: android.net.Network, networkCapabilities: android.net.NetworkCapabilities) { refreshAddresses() }
+            override fun onLinkPropertiesChanged(network: android.net.Network, linkProperties: android.net.LinkProperties) { refreshAddresses() }
+        }
+        val request = android.net.NetworkRequest.Builder().build()
+        try {
+            cm?.registerNetworkCallback(request, callback)
+        } catch (e: Exception) {
+            android.util.Log.w("MainActivity", "Failed to register network callback", e)
+        }
+
         castingManager.startDiscovery()
-        onDispose { castingManager.stopDiscovery() }
+
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+            try {
+                cm?.unregisterNetworkCallback(callback)
+            } catch (e: Exception) {}
+            castingManager.stopDiscovery()
+        }
     }
 
     Box(
@@ -506,720 +1203,1088 @@ fun HostAndToolsContent(onClose: () -> Unit) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .verticalScroll(scrollState)
-                .padding(24.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Top
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 20.dp, vertical = 16.dp)
         ) {
-
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-            IconButton(onClick = onClose) {
-                Icon(Icons.Default.Close, contentDescription = "Close", tint = Color.White)
-            }
-        }
-
-        Spacer(modifier = Modifier.height(24.dp))
-
-        // Professional Header
-        Surface(
-            modifier = Modifier.size(72.dp),
-            shape = CircleShape,
-            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
-        ) {
-            Box(contentAlignment = Alignment.Center) {
-                Icon(
-                    imageVector = Icons.Default.Share,
-                    contentDescription = "Share",
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(36.dp)
-                )
-            }
-        }
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Box(
-                modifier = Modifier
-                    .size(10.dp)
-                    .graphicsLayer {
-                        if (isServerRunning) {
-                            scaleX = pulseScale
-                            scaleY = pulseScale
-                        }
-                    }
-                    .clip(CircleShape)
-                    .background(if (isServerRunning) Color(0xFF10B981) else Color(0xFFEF4444))
-            )
-            Spacer(modifier = Modifier.width(8.dp))
-            Text(
-                text = "File Mate",
-                style = MaterialTheme.typography.headlineMedium,
-                fontWeight = FontWeight.Bold,
-                color = Color.White
-            )
-        }
-        val activeType = networkAddresses.getOrNull(selectedIpIndex)?.type
-        val connectionSubtext = when (activeType) {
-            NetworkType.HOTSPOT -> "Access via Mobile Hotspot"
-            NetworkType.WIFI -> "Access via local Wi-Fi"
-            NetworkType.ETHERNET -> "Access via Ethernet"
-            NetworkType.USB_TETHERING -> "Access via USB Tethering"
-            else -> if (primaryIp == "127.0.0.1") "Offline (No Wi-Fi / Hotspot active)" else "Access via local network"
-        }
-        Text(
-            text = if (isServerRunning) "Server active • $connectionSubtext" else "Secured file and network sharing.",
-            style = MaterialTheme.typography.bodyMedium,
-            color = if (isServerRunning) Color(0xFF34D399) else Color.LightGray,
-            textAlign = TextAlign.Center
-        )
-
-        Spacer(modifier = Modifier.height(32.dp))
-
-        // Large Action Button
-        Button(
-            onClick = { if (isServerRunning) stopServer() else requestAllFilesAccessAndStart() },
-            modifier = Modifier
-                .fillMaxWidth(0.8f)
-                .height(64.dp)
-                .shadow(if (isServerRunning) 12.dp else 0.dp, RoundedCornerShape(32.dp)),
-            shape = RoundedCornerShape(32.dp),
-            colors = ButtonDefaults.buttonColors(
-                containerColor = if (isServerRunning) Color(0xFF1E293B) else MaterialTheme.colorScheme.primary,
-                contentColor = if (isServerRunning) Color(0xFFF43F5E) else Color.White
-            ),
-            contentPadding = PaddingValues(0.dp)
-        ) {
+            // Header: Title, Server Quick Toggle & Close Button
             Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.Center,
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Icon(
-                    imageVector = if (isServerRunning) Icons.Default.Close else Icons.Default.PlayArrow,
-                    contentDescription = null,
-                    modifier = Modifier.size(28.dp)
-                )
-                Spacer(modifier = Modifier.width(12.dp))
-                Text(
-                    text = if (isServerRunning) "Stop Sharing" else "Start Sharing",
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.Bold
-                )
-            }
-        }
-
-        Spacer(modifier = Modifier.height(24.dp))
-
-        // Premium Segmented Control Tabs
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 24.dp)
-                .clip(RoundedCornerShape(24.dp))
-                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f))
-                .padding(4.dp),
-            horizontalArrangement = Arrangement.SpaceEvenly
-        ) {
-            val tab0Bg = if (selectedTab == 0) MaterialTheme.colorScheme.primary.copy(alpha = 0.2f) else Color.Transparent
-            val tab1Bg = if (selectedTab == 1) MaterialTheme.colorScheme.primary.copy(alpha = 0.2f) else Color.Transparent
-            val tab2Bg = if (selectedTab == 2) MaterialTheme.colorScheme.primary.copy(alpha = 0.2f) else Color.Transparent
-            
-            Box(
-                modifier = Modifier
-                    .weight(1f)
-                    .clip(RoundedCornerShape(20.dp))
-                    .background(tab0Bg)
-                    .clickable { selectedTab = 0 }
-                    .padding(vertical = 12.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    text = "📡 Server",
-                    style = MaterialTheme.typography.labelLarge,
-                    color = if (selectedTab == 0) MaterialTheme.colorScheme.primary else Color.LightGray,
-                    fontWeight = FontWeight.Bold
-                )
-            }
-            Box(
-                modifier = Modifier
-                    .weight(1f)
-                    .clip(RoundedCornerShape(20.dp))
-                    .background(tab1Bg)
-                    .clickable { selectedTab = 1 }
-                    .padding(vertical = 12.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    text = "🛠️ Tools",
-                    style = MaterialTheme.typography.labelLarge,
-                    color = if (selectedTab == 1) MaterialTheme.colorScheme.primary else Color.LightGray,
-                    fontWeight = FontWeight.Bold
-                )
-            }
-            Box(
-                modifier = Modifier
-                    .weight(1f)
-                    .clip(RoundedCornerShape(20.dp))
-                    .background(tab2Bg)
-                    .clickable { selectedTab = 2 }
-                    .padding(vertical = 12.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    text = "📺 Cast",
-                    style = MaterialTheme.typography.labelLarge,
-                    color = if (selectedTab == 2) MaterialTheme.colorScheme.primary else Color.LightGray,
-                    fontWeight = FontWeight.Bold
-                )
-            }
-        }
-
-        Spacer(modifier = Modifier.height(24.dp))
-
-        if (selectedTab == 0) {
-            AnimatedVisibility(
-                visible = isServerRunning,
-                enter = fadeIn(animationSpec = tween(400)) + expandVertically(animationSpec = tween(400)),
-                exit = fadeOut(animationSpec = tween(300)) + shrinkVertically(animationSpec = tween(300))
-            ) {
-                Column(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    Text(
-                        text = "Scan QR Code on client device",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold,
-                        color = Color.White
-                    )
-                    Spacer(modifier = Modifier.height(16.dp))
-
-                    // Beautiful Card for QR Code
-                    ElevatedCard(
-                        shape = RoundedCornerShape(24.dp),
-                        colors = CardDefaults.elevatedCardColors(
-                            containerColor = Color.White
-                        ),
-                        elevation = CardDefaults.elevatedCardElevation(defaultElevation = 16.dp),
-                        modifier = Modifier.padding(16.dp)
-                    ) {
-                        Box(modifier = Modifier.padding(24.dp), contentAlignment = Alignment.Center) {
-                            qrCodeBitmap?.let { bitmap ->
-                                Image(
-                                    bitmap = bitmap.asImageBitmap(),
-                                    contentDescription = "QR Code",
-                                    modifier = Modifier.size(160.dp)
-                                )
-                            } ?: Text("Generating QR...", color = Color.Gray)
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(8.dp))
-
-                    // Connection Details Card
-                    val serverUrl = "http://$primaryIp:8080"
-                    Surface(
-                        shape = RoundedCornerShape(16.dp),
-                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-                        border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = 0.05f)),
-                        modifier = Modifier.padding(horizontal = 16.dp).fillMaxWidth()
-                    ) {
-                        Column(
-                            modifier = Modifier.padding(vertical = 12.dp)
-                        ) {
-                            // Header: Label & Action Icons
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(horizontal = 16.dp, vertical = 2.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(
-                                        imageVector = Icons.Default.Info,
-                                        contentDescription = null,
-                                        tint = MaterialTheme.colorScheme.primary,
-                                        modifier = Modifier.size(18.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    Text(
-                                        text = "SERVER ADDRESS",
-                                        style = MaterialTheme.typography.labelMedium,
-                                        fontWeight = FontWeight.Bold,
-                                        color = Color.LightGray,
-                                        letterSpacing = 0.5.sp
-                                    )
-                                }
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    androidx.compose.material3.IconButton(
-                                        onClick = {
-                                            networkAddresses = NetworkUtils.getLocalNetworkAddresses()
-                                            if (selectedIpIndex >= networkAddresses.size) selectedIpIndex = 0
-                                            android.widget.Toast.makeText(context, "Network IP refreshed", android.widget.Toast.LENGTH_SHORT).show()
-                                        },
-                                        modifier = Modifier.size(36.dp)
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Default.Refresh,
-                                            contentDescription = "Refresh IP",
-                                            tint = MaterialTheme.colorScheme.primary,
-                                            modifier = Modifier.size(20.dp)
-                                        )
-                                    }
-                                    Spacer(modifier = Modifier.width(4.dp))
-                                    androidx.compose.material3.IconButton(
-                                        onClick = {
-                                            val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
-                                            val clip = android.content.ClipData.newPlainText("File Mate URL", serverUrl)
-                                            clipboard.setPrimaryClip(clip)
-                                            android.widget.Toast.makeText(context, "Copied $serverUrl", android.widget.Toast.LENGTH_SHORT).show()
-                                        },
-                                        modifier = Modifier.size(36.dp)
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Default.Share,
-                                            contentDescription = "Copy",
-                                            tint = MaterialTheme.colorScheme.primary,
-                                            modifier = Modifier.size(20.dp)
-                                        )
-                                    }
-                                }
-                            }
-
-                            // Dedicated Full-Width URL Display - Never Truncated!
-                            Surface(
-                                shape = RoundedCornerShape(10.dp),
-                                color = Color.Black.copy(alpha = 0.3f),
-                                modifier = Modifier
-                                    .padding(horizontal = 16.dp, vertical = 4.dp)
-                                    .fillMaxWidth()
-                                    .clickable {
-                                        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
-                                        val clip = android.content.ClipData.newPlainText("File Mate URL", serverUrl)
-                                        clipboard.setPrimaryClip(clip)
-                                        android.widget.Toast.makeText(context, "Copied $serverUrl", android.widget.Toast.LENGTH_SHORT).show()
-                                    }
-                            ) {
-                                Text(
-                                    text = serverUrl,
-                                    style = MaterialTheme.typography.titleMedium.copy(
-                                        fontSize = 17.sp,
-                                        letterSpacing = 0.5.sp
-                                    ),
-                                    fontWeight = FontWeight.Bold,
-                                    color = Color(0xFF38BDF8),
-                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
-                                    softWrap = true
-                                )
-                            }
-
-                            if (networkAddresses.size > 1) {
-                                androidx.compose.foundation.lazy.LazyRow(
-                                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                ) {
-                                    items(networkAddresses.size) { idx ->
-                                        val info = networkAddresses[idx]
-                                        val isSelected = idx == selectedIpIndex
-                                        FilterChip(
-                                            selected = isSelected,
-                                            onClick = { selectedIpIndex = idx },
-                                            label = {
-                                                Text(
-                                                    "${info.displayName}: ${info.ip}",
-                                                    fontSize = 12.sp,
-                                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
-                                                )
-                                            },
-                                            colors = FilterChipDefaults.filterChipColors(
-                                                selectedContainerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.25f),
-                                                selectedLabelColor = MaterialTheme.colorScheme.primary
-                                            )
-                                        )
-                                    }
-                                }
-                            }
-
-                            if (networkAddresses.isEmpty()) {
-                                Text(
-                                    text = "⚠️ No active Wi-Fi or Hotspot. Please connect to Wi-Fi or turn on Hotspot.",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = Color(0xFFFBBF24),
-                                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
-                                )
-                            }
-                            
-                            Divider(color = Color.White.copy(alpha = 0.05f), modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
-                            
-                            // Credentials Row
-                            Row(
-                                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                Column {
-                                    Text(
-                                        text = "Username",
-                                        style = MaterialTheme.typography.labelMedium,
-                                        color = Color.LightGray
-                                    )
-                                    Spacer(modifier = Modifier.height(4.dp))
-                                    Text(
-                                        text = "admin",
-                                        style = MaterialTheme.typography.bodyLarge,
-                                        fontWeight = FontWeight.Bold,
-                                        color = Color.White
-                                    )
-                                }
-                                Column(horizontalAlignment = Alignment.End) {
-                                    Text(
-                                        text = "Password (PIN)",
-                                        style = MaterialTheme.typography.labelMedium,
-                                        color = Color.LightGray
-                                    )
-                                    Spacer(modifier = Modifier.height(4.dp))
-                                    Text(
-                                        text = currentPin,
-                                        style = MaterialTheme.typography.bodyLarge,
-                                        fontWeight = FontWeight.Bold,
-                                        color = MaterialTheme.colorScheme.primary
-                                    )
-                                }
-                            }
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(32.dp))
-
-                    // Network Stats section
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceEvenly
-                    ) {
-                        StatCard("File Server", formatBytes(webfsTx), formatBytes(webfsRx))
-                        StatCard("Proxy Server", formatBytes(proxyTx), formatBytes(proxyRx))
-                    }
-
-                    Spacer(modifier = Modifier.height(24.dp))
-
-                    // Proxy Guide
-                    Surface(
-                        shape = RoundedCornerShape(16.dp),
-                        color = Color(0xFF1E293B).copy(alpha = 0.5f),
-                        border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = 0.05f)),
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(
                         modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 16.dp)
+                            .size(42.dp)
+                            .clip(CircleShape)
+                            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)),
+                        contentAlignment = Alignment.Center
                     ) {
-                        Column(
-                            modifier = Modifier.padding(16.dp),
-                            horizontalAlignment = Alignment.Start
-                        ) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(
-                                    imageVector = Icons.Default.Info,
-                                    contentDescription = null,
-                                    tint = Color(0xFF38BDF8),
-                                    modifier = Modifier.size(20.dp)
-                                )
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text(
-                                    text = "HTTP Proxy Settings",
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.Bold,
-                                    color = Color(0xFF38BDF8)
-                                )
-                            }
-                            Spacer(modifier = Modifier.height(8.dp))
-                            Text(
-                                text = "To route traffic through this device, configure your client's proxy to:",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = Color.LightGray
-                            )
-                            Spacer(modifier = Modifier.height(12.dp))
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                Column {
-                                    Text(
-                                        text = "Host IP",
-                                        style = MaterialTheme.typography.labelMedium,
-                                        color = Color.LightGray
-                                    )
-                                    Spacer(modifier = Modifier.height(4.dp))
-                                    Text(
-                                        text = primaryIp,
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        fontWeight = FontWeight.Bold,
-                                        color = Color.White
-                                    )
-                                }
-                                Column(horizontalAlignment = Alignment.End) {
-                                    Text(
-                                        text = "Port",
-                                        style = MaterialTheme.typography.labelMedium,
-                                        color = Color.LightGray
-                                    )
-                                    Spacer(modifier = Modifier.height(4.dp))
-                                    Text(
-                                        text = "8081",
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        fontWeight = FontWeight.Bold,
-                                        color = Color.White
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-
-            if (!isServerRunning) {
-                Surface(
-                    shape = RoundedCornerShape(16.dp),
-                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.2f),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text(
-                        text = "Tap 'Start Sharing' above to generate QR code and active server address.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = Color.LightGray,
-                        textAlign = TextAlign.Center,
-                        modifier = Modifier.padding(24.dp)
-                    )
-                }
-            }
-        } else if (selectedTab == 1) {
-            // Storage Maintenance Tools Section (Tab 1)
-            Surface(
-                shape = RoundedCornerShape(16.dp),
-                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp)
-            ) {
-                Column(
-                    modifier = Modifier.padding(16.dp),
-                    horizontalAlignment = Alignment.Start
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            text = "🛠️",
-                            style = MaterialTheme.typography.titleMedium
+                        Icon(
+                            imageVector = Icons.Default.Build,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(22.dp)
                         )
-                        Spacer(modifier = Modifier.width(8.dp))
+                    }
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Column {
                         Text(
-                            text = "Storage Utilities & Cleaner",
-                            style = MaterialTheme.typography.titleMedium,
+                            text = "Tools & Proxy Hub",
+                            style = MaterialTheme.typography.titleLarge,
                             fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSurface
+                            color = Color.White
                         )
-                    }
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        text = "Clean empty folders & purge hidden OS junk files from Android UI.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = Color.LightGray
-                    )
-                    Spacer(modifier = Modifier.height(16.dp))
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        // Clean Empty Folders
-                        Button(
-                            onClick = {
-                                val sharedDir = FileServerService.sharedRoot ?: Environment.getExternalStorageDirectory()
-                                coroutineScope.launch(Dispatchers.IO) {
-                                    isCleaning = true
-                                    cleaningStatus = "Scanning & removing empty folders..."
-                                    val res = StorageMaintenanceHelper.cleanEmptyFolders(sharedDir, context)
-                                    withContext(Dispatchers.Main) {
-                                        isCleaning = false
-                                        cleaningStatus = ""
-                                        resultTitle = "🧹 Empty Folder Cleanup Results"
-                                        resultSummary = if (res.removedCount > 0)
-                                            "Successfully removed ${res.removedCount} empty directory(ies)."
-                                        else
-                                            "No empty folders were found in shared storage."
-                                        resultItems = res.removedFolders
-                                        showResultDialog = true
-                                    }
-                                }
-                            },
-                            enabled = !isCleaning,
-                            modifier = Modifier.weight(1f),
-                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
-                        ) {
-                            Text("🧹 Empty Folders", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onPrimaryContainer)
-                        }
-
-                        // Purge OS Junk Files
-                        Button(
-                            onClick = {
-                                val sharedDir = FileServerService.sharedRoot ?: Environment.getExternalStorageDirectory()
-                                coroutineScope.launch(Dispatchers.IO) {
-                                    isCleaning = true
-                                    cleaningStatus = "Scanning & purging OS junk files..."
-                                    val res = StorageMaintenanceHelper.cleanJunkFiles(sharedDir, context)
-                                    withContext(Dispatchers.Main) {
-                                        isCleaning = false
-                                        cleaningStatus = ""
-                                        val freedStr = StorageMaintenanceHelper.formatBytes(res.freedBytes)
-                                        resultTitle = "🗑️ OS Junk Purge Results"
-                                        resultSummary = if (res.removedCount > 0)
-                                            "Purged ${res.removedCount} junk file(s), freeing $freedStr."
-                                        else
-                                            "No OS junk files (.DS_Store, Thumbs.db, .tmp) were found."
-                                        resultItems = res.removedFiles
-                                        showResultDialog = true
-                                    }
-                                }
-                            },
-                            enabled = !isCleaning,
-                            modifier = Modifier.weight(1f),
-                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)
-                        ) {
-                            Text("🗑️ Purge Junk", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSecondaryContainer)
-                        }
-                    }
-
-                    // In-card Live Progress Feedback
-                    if (isCleaning) {
-                        Spacer(modifier = Modifier.height(14.dp))
-                        LinearProgressIndicator(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clip(RoundedCornerShape(4.dp))
-                        )
-                        Spacer(modifier = Modifier.height(6.dp))
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(14.dp),
-                                strokeWidth = 2.dp,
-                                color = MaterialTheme.colorScheme.primary
+                            Box(
+                                modifier = Modifier
+                                    .size(8.dp)
+                                    .clip(CircleShape)
+                                    .background(if (isServerRunning) Color(0xFF10B981) else Color.Gray)
                             )
-                            Spacer(modifier = Modifier.width(8.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
                             Text(
-                                text = cleaningStatus,
+                                text = if (isServerRunning) "Online • HTTP :8080 | Proxy :8081" else "Offline • Background services idle",
                                 style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.primary
+                                color = if (isServerRunning) Color(0xFF34D399) else Color.LightGray
+                            )
+                        }
+                    }
+                }
+
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Switch(
+                        checked = isServerRunning,
+                        onCheckedChange = { shouldRun ->
+                            if (shouldRun) {
+                                val rootUri = Uri.fromFile(Environment.getExternalStorageDirectory())
+                                val intent = Intent(context, FileServerService::class.java).apply {
+                                    putExtra("FOLDER_URI", rootUri.toString())
+                                }
+                                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                                    context.startForegroundService(intent)
+                                } else {
+                                    context.startService(intent)
+                                }
+                                isServerRunning = true
+                            } else {
+                                val intent = Intent(context, FileServerService::class.java).apply {
+                                    action = "STOP"
+                                }
+                                context.startService(intent)
+                                isServerRunning = false
+                            }
+                        },
+                        modifier = Modifier.scale(0.8f)
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    IconButton(
+                        onClick = onClose,
+                        modifier = Modifier
+                            .size(36.dp)
+                            .background(Color.White.copy(alpha = 0.1f), CircleShape)
+                    ) {
+                        Icon(Icons.Default.Close, contentDescription = "Close", tint = Color.White, modifier = Modifier.size(20.dp))
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(20.dp))
+
+            // 3 Segmented Tabs
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(Color.White.copy(alpha = 0.07f))
+                    .padding(4.dp),
+                horizontalArrangement = Arrangement.SpaceEvenly
+            ) {
+                val tabs = listOf(
+                    Triple(0, "HTTP Proxy", Icons.Default.VpnKey),
+                    Triple(1, "Storage", Icons.Default.CleaningServices),
+                    Triple(2, "Diagnostics", Icons.Default.Security)
+                )
+                tabs.forEach { (index, title, icon) ->
+                    val isSel = selectedTab == index
+                    Surface(
+                        modifier = Modifier
+                            .weight(1f)
+                            .clip(RoundedCornerShape(12.dp))
+                            .clickable { selectedTab = index },
+                        color = if (isSel) MaterialTheme.colorScheme.primary else Color.Transparent,
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(vertical = 10.dp),
+                            horizontalArrangement = Arrangement.Center,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = icon,
+                                contentDescription = null,
+                                modifier = Modifier.size(16.dp),
+                                tint = if (isSel) MaterialTheme.colorScheme.onPrimary else Color.LightGray
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = title,
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = if (isSel) FontWeight.Bold else FontWeight.Medium,
+                                color = if (isSel) MaterialTheme.colorScheme.onPrimary else Color.LightGray
                             )
                         }
                     }
                 }
             }
-        } else if (selectedTab == 2) {
-            // Casting (Tab 2)
-            val activeCaster by CastingState.activeCaster.collectAsState()
-            var castStatus by remember { mutableStateOf("") }
-            
-            Surface(
-                shape = RoundedCornerShape(16.dp),
-                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp)
-            ) {
-                Column(
-                    modifier = Modifier.padding(16.dp),
-                    horizontalAlignment = Alignment.Start
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("📺", style = MaterialTheme.typography.titleMedium)
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = "Media Casting",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                    }
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        text = "Cast media to AirPlay or DLNA devices on your network.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = Color.LightGray
-                    )
-                    Spacer(modifier = Modifier.height(16.dp))
 
-                    if (discoveredDevices.isEmpty()) {
-                        Text("Scanning for devices on network (mDNS)...", color = Color.Gray, style = MaterialTheme.typography.bodySmall)
-                    } else {
-                        Text("Discovered Devices:", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
-                        Spacer(modifier = Modifier.height(8.dp))
-                        
-                        discoveredDevices.forEach { device ->
-                            Surface(
-                                shape = RoundedCornerShape(8.dp),
-                                color = if (activeCaster?.deviceId == device.deviceId) MaterialTheme.colorScheme.primary.copy(alpha = 0.2f) else Color.Black.copy(alpha = 0.2f),
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(vertical = 4.dp)
-                                    .clickable { CastingState.activeCaster.value = device }
-                            ) {
+            Spacer(modifier = Modifier.height(20.dp))
+
+            when (selectedTab) {
+                0 -> {
+                    // TAB 0: HTTP PROXY SUITE
+                    val proxyUrl = "http://$primaryIp:8081"
+                    val exportSnippet = "export http_proxy=\"http://$primaryIp:8081\"\nexport https_proxy=\"http://$primaryIp:8081\""
+                    val curlSnippet = "curl -x http://$primaryIp:8081 https://icanhazip.com"
+
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                        // Proxy Endpoint Card
+                        Surface(
+                            shape = RoundedCornerShape(16.dp),
+                            color = Color(0xFF1E293B).copy(alpha = 0.7f),
+                            border = BorderStroke(1.dp, Color(0xFF38BDF8).copy(alpha = 0.3f)),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(modifier = Modifier.padding(16.dp)) {
                                 Row(
-                                    modifier = Modifier.padding(12.dp),
+                                    modifier = Modifier.fillMaxWidth(),
                                     horizontalArrangement = Arrangement.SpaceBetween,
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    Column {
-                                        Text(device.deviceName, color = Color.White, fontWeight = FontWeight.Bold)
-                                        Text(device.deviceId, color = Color.Gray, style = MaterialTheme.typography.bodySmall)
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Box(
+                                            modifier = Modifier
+                                                .size(10.dp)
+                                                .clip(CircleShape)
+                                                .background(if (isServerRunning) Color(0xFF10B981) else Color.Gray)
+                                        )
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Text(
+                                            text = "HTTP/HTTPS Proxy Service",
+                                            style = MaterialTheme.typography.titleMedium,
+                                            fontWeight = FontWeight.Bold,
+                                            color = Color.White
+                                        )
                                     }
-                                    if (activeCaster?.deviceId == device.deviceId) {
-                                        Icon(imageVector = Icons.Default.PlayArrow, contentDescription = "Active", tint = MaterialTheme.colorScheme.primary)
+                                    Surface(
+                                        shape = RoundedCornerShape(8.dp),
+                                        color = Color(0xFF0284C7).copy(alpha = 0.25f)
+                                    ) {
+                                        Text(
+                                            text = "PORT 8081",
+                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                            style = MaterialTheme.typography.labelSmall,
+                                            fontWeight = FontWeight.Bold,
+                                            color = Color(0xFF38BDF8)
+                                        )
+                                    }
+                                }
+
+                                Spacer(modifier = Modifier.height(10.dp))
+                                Text(
+                                    text = "Route Wi-Fi, LAN, or Hotspot client traffic through this device. Supports HTTP and transparent HTTPS CONNECT tunneling.",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = Color.LightGray
+                                )
+
+                                Spacer(modifier = Modifier.height(14.dp))
+
+                                Surface(
+                                    shape = RoundedCornerShape(10.dp),
+                                    color = Color.Black.copy(alpha = 0.45f),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clickable {
+                                            clipboardManager.setText(AnnotatedString(proxyUrl))
+                                            Toast.makeText(context, "Copied proxy address: $proxyUrl", Toast.LENGTH_SHORT).show()
+                                        }
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.SpaceBetween
+                                    ) {
+                                        Column {
+                                            Text(
+                                                text = "PROXY ADDRESS",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = Color.Gray,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                            Text(
+                                                text = proxyUrl,
+                                                style = MaterialTheme.typography.titleMedium,
+                                                fontWeight = FontWeight.Bold,
+                                                color = Color(0xFF38BDF8)
+                                            )
+                                        }
+                                        Icon(
+                                            imageVector = Icons.Default.ContentCopy,
+                                            contentDescription = "Copy Proxy",
+                                            tint = Color(0xFF38BDF8),
+                                            modifier = Modifier.size(20.dp)
+                                        )
+                                    }
+                                }
+                            }
+                        }
+
+                        // Live Bandwidth
+                        Surface(
+                            shape = RoundedCornerShape(16.dp),
+                            color = Color(0xFF1E293B).copy(alpha = 0.5f),
+                            border = BorderStroke(1.dp, Color.White.copy(alpha = 0.05f)),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(modifier = Modifier.padding(16.dp)) {
+                                Text(
+                                    text = "Proxy Traffic Throughput",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color.LightGray
+                                )
+                                Spacer(modifier = Modifier.height(10.dp))
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Column {
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Text("↑ ", color = Color(0xFF10B981), fontWeight = FontWeight.Bold)
+                                            Text("Upload (Tx)", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+                                        }
+                                        Text(
+                                            text = StorageMaintenanceHelper.formatBytes(proxyTx),
+                                            style = MaterialTheme.typography.titleMedium,
+                                            fontWeight = FontWeight.Bold,
+                                            color = Color.White
+                                        )
+                                    }
+                                    Column(horizontalAlignment = Alignment.End) {
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Text("↓ ", color = Color(0xFF38BDF8), fontWeight = FontWeight.Bold)
+                                            Text("Download (Rx)", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+                                        }
+                                        Text(
+                                            text = StorageMaintenanceHelper.formatBytes(proxyRx),
+                                            style = MaterialTheme.typography.titleMedium,
+                                            fontWeight = FontWeight.Bold,
+                                            color = Color.White
+                                        )
+                                    }
+                                }
+                            }
+                        }
+
+                        // CLI / Developer Snippets
+                        Surface(
+                            shape = RoundedCornerShape(16.dp),
+                            color = Color(0xFF1E293B).copy(alpha = 0.5f),
+                            border = BorderStroke(1.dp, Color.White.copy(alpha = 0.05f)),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(modifier = Modifier.padding(16.dp)) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = "💻 Developer & Terminal CLI",
+                                        style = MaterialTheme.typography.labelMedium,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color.LightGray
+                                    )
+                                    TextButton(
+                                        onClick = {
+                                            clipboardManager.setText(AnnotatedString(exportSnippet))
+                                            Toast.makeText(context, "Copied environment export snippet", Toast.LENGTH_SHORT).show()
+                                        },
+                                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+                                    ) {
+                                        Icon(Icons.Default.ContentCopy, contentDescription = null, modifier = Modifier.size(14.dp))
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text("Copy Export", style = MaterialTheme.typography.labelSmall)
+                                    }
+                                }
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Surface(
+                                    shape = RoundedCornerShape(8.dp),
+                                    color = Color(0xFF0F172A),
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Column(modifier = Modifier.padding(10.dp)) {
+                                        Text(
+                                            text = exportSnippet,
+                                            fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                                            fontSize = 12.sp,
+                                            color = Color(0xFF38BDF8)
+                                        )
+                                        Spacer(modifier = Modifier.height(8.dp))
+                                        Divider(color = Color.White.copy(alpha = 0.1f))
+                                        Spacer(modifier = Modifier.height(8.dp))
+                                        Text(
+                                            text = "# Quick test using curl:",
+                                            fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                                            fontSize = 11.sp,
+                                            color = Color.Gray
+                                        )
+                                        Text(
+                                            text = curlSnippet,
+                                            fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                                            fontSize = 12.sp,
+                                            color = Color(0xFFA7F3D0)
+                                        )
+                                    }
+                                }
+                            }
+                        }
+
+                        // Client Setup Guides
+                        Surface(
+                            shape = RoundedCornerShape(16.dp),
+                            color = Color(0xFF1E293B).copy(alpha = 0.5f),
+                            border = BorderStroke(1.dp, Color.White.copy(alpha = 0.05f)),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(modifier = Modifier.padding(16.dp)) {
+                                Text(
+                                    text = "📱 Client Setup Guide",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color.LightGray
+                                )
+                                Spacer(modifier = Modifier.height(10.dp))
+
+                                val guides = listOf(
+                                    Pair("iOS / iPadOS", "Settings → Wi-Fi → Tap (i) on network → Configure Proxy → Manual\n• Server: $primaryIp\n• Port: 8081"),
+                                    Pair("Android", "Settings → Wi-Fi → Tap network gear/pencil → Advanced → Proxy: Manual\n• Proxy hostname: $primaryIp\n• Proxy port: 8081"),
+                                    Pair("macOS", "System Settings → Network → Wi-Fi → Details → Proxies\n• Turn on 'Web Proxy (HTTP)' and 'Secure Web Proxy (HTTPS)'\n• Server: $primaryIp, Port: 8081"),
+                                    Pair("Windows 10 / 11", "Settings → Network & Internet → Proxy\n• Manual proxy setup → Turn on 'Use a proxy server'\n• IP: $primaryIp, Port: 8081")
+                                )
+
+                                guides.forEachIndexed { idx, (os, steps) ->
+                                    if (idx > 0) Divider(color = Color.White.copy(alpha = 0.05f), modifier = Modifier.padding(vertical = 8.dp))
+                                    Column {
+                                        Text(
+                                            text = os,
+                                            style = MaterialTheme.typography.labelMedium,
+                                            fontWeight = FontWeight.Bold,
+                                            color = Color(0xFFE2E8F0)
+                                        )
+                                        Spacer(modifier = Modifier.height(4.dp))
+                                        Text(
+                                            text = steps,
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = Color.LightGray,
+                                            lineHeight = 18.sp
+                                        )
                                     }
                                 }
                             }
                         }
                     }
+                }
 
-                    if (activeCaster != null) {
-                        Spacer(modifier = Modifier.height(16.dp))
-                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                            Button(
-                                onClick = {
-                                    coroutineScope.launch {
-                                        try {
-                                            castStatus = "Sending test image..."
-                                            // Demo: Generate a byte array of the QR code to test AirPlay
-                                            val stream = java.io.ByteArrayOutputStream()
-                                            qrCodeBitmap?.compress(Bitmap.CompressFormat.JPEG, 100, stream)
-                                            val bytes = stream.toByteArray()
-                                            
-                                            // Send it
-                                            activeCaster?.showImage("http://$primaryIp:8080/", bytes)
-                                            castStatus = "Test image sent!"
-                                        } catch (e: Exception) {
-                                            castStatus = "Error: ${e.message}"
-                                        }
+                1 -> {
+                    // TAB 1: STORAGE CLEANER & MAINTENANCE
+                    val (freeBytes, totalBytes) = storageStats
+                    val usedBytes = (totalBytes - freeBytes).coerceAtLeast(0L)
+                    val usedPct = if (totalBytes > 0) (usedBytes.toFloat() / totalBytes.toFloat()).coerceIn(0f, 1f) else 0f
+
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                        // Capacity Meter
+                        Surface(
+                            shape = RoundedCornerShape(16.dp),
+                            color = Color(0xFF1E293B).copy(alpha = 0.7f),
+                            border = BorderStroke(1.dp, Color.White.copy(alpha = 0.08f)),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(modifier = Modifier.padding(16.dp)) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Icon(
+                                            imageVector = Icons.Default.Storage,
+                                            contentDescription = null,
+                                            tint = MaterialTheme.colorScheme.primary,
+                                            modifier = Modifier.size(20.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Text(
+                                            text = "Device Storage Capacity",
+                                            style = MaterialTheme.typography.titleMedium,
+                                            fontWeight = FontWeight.Bold,
+                                            color = Color.White
+                                        )
                                     }
-                                },
-                                modifier = Modifier.weight(1f)
-                            ) {
-                                Text("Test Cast")
-                            }
-                            Button(
-                                onClick = {
-                                    coroutineScope.launch {
-                                        activeCaster?.stop()
-                                        CastingState.activeCaster.value = null
-                                        castStatus = ""
-                                    }
-                                },
-                                modifier = Modifier.weight(1f),
-                                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
-                            ) {
-                                Text("Stop")
+                                    Text(
+                                        text = "${(usedPct * 100).toInt()}% Used",
+                                        style = MaterialTheme.typography.labelMedium,
+                                        fontWeight = FontWeight.Bold,
+                                        color = if (usedPct > 0.9f) Color(0xFFF43F5E) else if (usedPct > 0.75f) Color(0xFFF59E0B) else Color(0xFF10B981)
+                                    )
+                                }
+
+                                Spacer(modifier = Modifier.height(12.dp))
+
+                                LinearProgressIndicator(
+                                    progress = usedPct,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(8.dp)
+                                        .clip(RoundedCornerShape(4.dp)),
+                                    color = if (usedPct > 0.9f) Color(0xFFF43F5E) else if (usedPct > 0.75f) Color(0xFFF59E0B) else Color(0xFF38BDF8),
+                                    trackColor = Color.White.copy(alpha = 0.1f)
+                                )
+
+                                Spacer(modifier = Modifier.height(10.dp))
+
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Text(
+                                        text = "Free: ${StorageMaintenanceHelper.formatBytes(freeBytes)}",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = Color(0xFF34D399),
+                                        fontWeight = FontWeight.SemiBold
+                                    )
+                                    Text(
+                                        text = "Used: ${StorageMaintenanceHelper.formatBytes(usedBytes)}",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = Color.LightGray
+                                    )
+                                    Text(
+                                        text = "Total: ${StorageMaintenanceHelper.formatBytes(totalBytes)}",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = Color.Gray
+                                    )
+                                }
                             }
                         }
-                        if (castStatus.isNotEmpty()) {
-                            Spacer(modifier = Modifier.height(8.dp))
-                            Text(castStatus, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+
+                        // Empty Folder Cleaner Card
+                        Surface(
+                            shape = RoundedCornerShape(16.dp),
+                            color = Color(0xFF1E293B).copy(alpha = 0.5f),
+                            border = BorderStroke(1.dp, Color.White.copy(alpha = 0.05f)),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(modifier = Modifier.padding(16.dp)) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(
+                                        imageVector = Icons.Default.DeleteSweep,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.size(22.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(10.dp))
+                                    Column {
+                                        Text(
+                                            text = "Empty Directory Cleaner",
+                                            style = MaterialTheme.typography.titleMedium,
+                                            fontWeight = FontWeight.Bold,
+                                            color = Color.White
+                                        )
+                                        Text(
+                                            text = "Scans storage and purges ghost empty folders",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = Color.LightGray
+                                        )
+                                    }
+                                }
+
+                                Spacer(modifier = Modifier.height(12.dp))
+                                Text(
+                                    text = "Recursively searches user directories and safely removes leftover empty folders created by uninstalled apps (system and media root folders are strictly protected).",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = Color.Gray
+                                )
+                                Spacer(modifier = Modifier.height(16.dp))
+
+                                Button(
+                                    onClick = {
+                                        val sharedDir = FileServerService.sharedRoot ?: Environment.getExternalStorageDirectory()
+                                        coroutineScope.launch(Dispatchers.IO) {
+                                            isCleaning = true
+                                            cleaningStatus = "Scanning and pruning empty directories..."
+                                            val res = StorageMaintenanceHelper.cleanEmptyFolders(sharedDir, context)
+                                            withContext(Dispatchers.Main) {
+                                                isCleaning = false
+                                                cleaningStatus = ""
+                                                storageRefreshTrigger++
+                                                resultTitle = "🧹 Empty Directory Cleanup"
+                                                resultSummary = if (res.removedCount > 0)
+                                                    "Successfully removed ${res.removedCount} empty folder(s)."
+                                                else
+                                                    "No empty directories were found in shared storage."
+                                                resultItems = res.removedFolders
+                                                showResultDialog = true
+                                            }
+                                        }
+                                    },
+                                    enabled = !isCleaning,
+                                    modifier = Modifier.fillMaxWidth(),
+                                    shape = RoundedCornerShape(10.dp),
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = MaterialTheme.colorScheme.primaryContainer,
+                                        contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                                    )
+                                ) {
+                                    Icon(Icons.Default.DeleteSweep, contentDescription = null, modifier = Modifier.size(18.dp))
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text("Clean Empty Folders", fontWeight = FontWeight.Bold)
+                                }
+                            }
+                        }
+
+                        // OS Junk Purge Card
+                        Surface(
+                            shape = RoundedCornerShape(16.dp),
+                            color = Color(0xFF1E293B).copy(alpha = 0.5f),
+                            border = BorderStroke(1.dp, Color.White.copy(alpha = 0.05f)),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(modifier = Modifier.padding(16.dp)) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(
+                                        imageVector = Icons.Default.CleaningServices,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.secondary,
+                                        modifier = Modifier.size(22.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(10.dp))
+                                    Column {
+                                        Text(
+                                            text = "OS & Desktop Junk Purge",
+                                            style = MaterialTheme.typography.titleMedium,
+                                            fontWeight = FontWeight.Bold,
+                                            color = Color.White
+                                        )
+                                        Text(
+                                            text = "Removes cross-platform desktop clutter",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = Color.LightGray
+                                        )
+                                    }
+                                }
+
+                                Spacer(modifier = Modifier.height(12.dp))
+                                Text(
+                                    text = "Cleans hidden metadata files left behind from macOS, Windows, and temp transfers: .DS_Store, Thumbs.db, Desktop.ini, *.tmp, *.bak, and *~ backup files.",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = Color.Gray
+                                )
+                                Spacer(modifier = Modifier.height(16.dp))
+
+                                Button(
+                                    onClick = {
+                                        val sharedDir = FileServerService.sharedRoot ?: Environment.getExternalStorageDirectory()
+                                        coroutineScope.launch(Dispatchers.IO) {
+                                            isCleaning = true
+                                            cleaningStatus = "Scanning and purging OS junk files..."
+                                            val res = StorageMaintenanceHelper.cleanJunkFiles(sharedDir, context)
+                                            withContext(Dispatchers.Main) {
+                                                isCleaning = false
+                                                cleaningStatus = ""
+                                                storageRefreshTrigger++
+                                                val freedStr = StorageMaintenanceHelper.formatBytes(res.freedBytes)
+                                                resultTitle = "🗑️ Desktop Junk Purge"
+                                                resultSummary = if (res.removedCount > 0)
+                                                    "Purged ${res.removedCount} hidden junk file(s), freeing $freedStr."
+                                                else
+                                                    "No desktop junk files (.DS_Store, Thumbs.db, *.tmp) were found."
+                                                resultItems = res.removedFiles
+                                                showResultDialog = true
+                                            }
+                                        }
+                                    },
+                                    enabled = !isCleaning,
+                                    modifier = Modifier.fillMaxWidth(),
+                                    shape = RoundedCornerShape(10.dp),
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                                        contentColor = MaterialTheme.colorScheme.onSecondaryContainer
+                                    )
+                                ) {
+                                    Icon(Icons.Default.CleaningServices, contentDescription = null, modifier = Modifier.size(18.dp))
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text("Purge OS Junk Files", fontWeight = FontWeight.Bold)
+                                }
+                            }
+                        }
+
+                        // Live In-Card Cleaning Progress
+                        if (isCleaning) {
+                            Surface(
+                                shape = RoundedCornerShape(12.dp),
+                                color = Color.Black.copy(alpha = 0.5f),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Column(modifier = Modifier.padding(14.dp)) {
+                                    LinearProgressIndicator(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clip(RoundedCornerShape(4.dp))
+                                    )
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        CircularProgressIndicator(
+                                            modifier = Modifier.size(14.dp),
+                                            strokeWidth = 2.dp,
+                                            color = MaterialTheme.colorScheme.primary
+                                        )
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Text(
+                                            text = cleaningStatus,
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.primary
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                2 -> {
+                    // TAB 2: NETWORK & SECURITY DIAGNOSTICS
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                        // WebUI Security PIN Card
+                        Surface(
+                            shape = RoundedCornerShape(16.dp),
+                            color = Color(0xFF1E293B).copy(alpha = 0.7f),
+                            border = BorderStroke(1.dp, Color.White.copy(alpha = 0.08f)),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(modifier = Modifier.padding(16.dp)) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Icon(
+                                            imageVector = Icons.Default.Security,
+                                            contentDescription = null,
+                                            tint = MaterialTheme.colorScheme.primary,
+                                            modifier = Modifier.size(20.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Text(
+                                            text = "WebUI Security PIN",
+                                            style = MaterialTheme.typography.titleMedium,
+                                            fontWeight = FontWeight.Bold,
+                                            color = Color.White
+                                        )
+                                    }
+                                    Surface(
+                                        shape = RoundedCornerShape(8.dp),
+                                        color = Color(0xFF10B981).copy(alpha = 0.2f)
+                                    ) {
+                                        Text(
+                                            text = "Active",
+                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                            style = MaterialTheme.typography.labelSmall,
+                                            fontWeight = FontWeight.Bold,
+                                            color = Color(0xFF34D399)
+                                        )
+                                    }
+                                }
+
+                                Spacer(modifier = Modifier.height(10.dp))
+                                Text(
+                                    text = "Web browser clients accessing File Mate must provide this PIN to authorize file downloads, deletions, and folder creations.",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = Color.LightGray
+                                )
+
+                                Spacer(modifier = Modifier.height(14.dp))
+
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Surface(
+                                        shape = RoundedCornerShape(10.dp),
+                                        color = Color.Black.copy(alpha = 0.4f),
+                                        modifier = Modifier.padding(end = 8.dp)
+                                    ) {
+                                        Row(
+                                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.Lock,
+                                                contentDescription = null,
+                                                tint = MaterialTheme.colorScheme.primary,
+                                                modifier = Modifier.size(16.dp)
+                                            )
+                                            Spacer(modifier = Modifier.width(8.dp))
+                                            Text(
+                                                text = currentPin.chunked(1).joinToString("  "),
+                                                style = MaterialTheme.typography.titleLarge,
+                                                fontWeight = FontWeight.ExtraBold,
+                                                color = MaterialTheme.colorScheme.primary,
+                                                letterSpacing = 2.sp
+                                            )
+                                        }
+                                    }
+
+                                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        OutlinedButton(
+                                            onClick = {
+                                                clipboardManager.setText(AnnotatedString(currentPin))
+                                                Toast.makeText(context, "Copied PIN $currentPin", Toast.LENGTH_SHORT).show()
+                                            },
+                                            shape = RoundedCornerShape(8.dp),
+                                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                                        ) {
+                                            Icon(Icons.Default.ContentCopy, contentDescription = "Copy PIN", modifier = Modifier.size(16.dp))
+                                            Spacer(modifier = Modifier.width(4.dp))
+                                            Text("Copy", style = MaterialTheme.typography.labelSmall)
+                                        }
+
+                                        Button(
+                                            onClick = {
+                                                AuthHelper.generateNewPin()
+                                                Toast.makeText(context, "New PIN generated!", Toast.LENGTH_SHORT).show()
+                                            },
+                                            shape = RoundedCornerShape(8.dp),
+                                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                                        ) {
+                                            Icon(Icons.Default.Refresh, contentDescription = "New PIN", modifier = Modifier.size(16.dp))
+                                            Spacer(modifier = Modifier.width(4.dp))
+                                            Text("New PIN", style = MaterialTheme.typography.labelSmall)
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        // Network Adapters Inspector
+                        Surface(
+                            shape = RoundedCornerShape(16.dp),
+                            color = Color(0xFF1E293B).copy(alpha = 0.5f),
+                            border = BorderStroke(1.dp, Color.White.copy(alpha = 0.05f)),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(modifier = Modifier.padding(16.dp)) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Icon(
+                                            imageVector = Icons.Default.Router,
+                                            contentDescription = null,
+                                            tint = Color(0xFF38BDF8),
+                                            modifier = Modifier.size(20.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Text(
+                                            text = "Network Adapters (${networkAddresses.size})",
+                                            style = MaterialTheme.typography.titleMedium,
+                                            fontWeight = FontWeight.Bold,
+                                            color = Color.White
+                                        )
+                                    }
+                                    IconButton(
+                                        onClick = {
+                                            networkAddresses = NetworkUtils.getLocalNetworkAddresses()
+                                            if (selectedIpIndex >= networkAddresses.size) selectedIpIndex = 0
+                                            Toast.makeText(context, "Refreshed network interfaces", Toast.LENGTH_SHORT).show()
+                                        },
+                                        modifier = Modifier.size(32.dp)
+                                    ) {
+                                        Icon(Icons.Default.Refresh, contentDescription = "Refresh", tint = Color(0xFF38BDF8), modifier = Modifier.size(18.dp))
+                                    }
+                                }
+
+                                Spacer(modifier = Modifier.height(10.dp))
+
+                                if (networkAddresses.isEmpty()) {
+                                    Text(
+                                        text = "⚠️ No active network adapter found. Connect to Wi-Fi, Ethernet, or turn on Mobile Hotspot.",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = Color(0xFFFBBF24)
+                                    )
+                                } else {
+                                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        networkAddresses.forEachIndexed { idx, net ->
+                                            val isSelected = idx == selectedIpIndex
+                                            Surface(
+                                                shape = RoundedCornerShape(10.dp),
+                                                color = if (isSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.2f) else Color.Black.copy(alpha = 0.3f),
+                                                border = BorderStroke(
+                                                    1.dp,
+                                                    if (isSelected) MaterialTheme.colorScheme.primary else Color.White.copy(alpha = 0.05f)
+                                                ),
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .clickable { selectedIpIndex = idx }
+                                            ) {
+                                                Row(
+                                                    modifier = Modifier.padding(12.dp),
+                                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                                    verticalAlignment = Alignment.CenterVertically
+                                                ) {
+                                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                                        val icon = when (net.type) {
+                                                            NetworkType.HOTSPOT -> Icons.Default.WifiTethering
+                                                            NetworkType.WIFI -> Icons.Default.Wifi
+                                                            NetworkType.ETHERNET -> Icons.Default.Cable
+                                                            NetworkType.USB_TETHERING -> Icons.Default.Usb
+                                                            else -> Icons.Default.Language
+                                                        }
+                                                        Icon(
+                                                            imageVector = icon,
+                                                            contentDescription = null,
+                                                            tint = if (isSelected) MaterialTheme.colorScheme.primary else Color.Gray,
+                                                            modifier = Modifier.size(20.dp)
+                                                        )
+                                                        Spacer(modifier = Modifier.width(10.dp))
+                                                        Column {
+                                                            Text(
+                                                                text = "${net.displayName} (${net.interfaceName})",
+                                                                style = MaterialTheme.typography.bodyMedium,
+                                                                fontWeight = FontWeight.Bold,
+                                                                color = Color.White
+                                                            )
+                                                            Text(
+                                                                text = net.ip,
+                                                                style = MaterialTheme.typography.labelMedium,
+                                                                color = if (isSelected) MaterialTheme.colorScheme.primary else Color.LightGray
+                                                            )
+                                                        }
+                                                    }
+
+                                                    if (isSelected) {
+                                                        Surface(
+                                                            shape = RoundedCornerShape(6.dp),
+                                                            color = MaterialTheme.colorScheme.primary
+                                                        ) {
+                                                            Text(
+                                                                text = "PRIMARY",
+                                                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                                                style = MaterialTheme.typography.labelSmall,
+                                                                fontWeight = FontWeight.Bold,
+                                                                color = MaterialTheme.colorScheme.onPrimary
+                                                            )
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        // Traffic Monitor & Reset Card
+                        Surface(
+                            shape = RoundedCornerShape(16.dp),
+                            color = Color(0xFF1E293B).copy(alpha = 0.5f),
+                            border = BorderStroke(1.dp, Color.White.copy(alpha = 0.05f)),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(modifier = Modifier.padding(16.dp)) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = "Bandwidth Throughput",
+                                        style = MaterialTheme.typography.titleMedium,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color.White
+                                    )
+                                    TextButton(
+                                        onClick = {
+                                            TrafficMonitor.reset()
+                                            Toast.makeText(context, "Counters reset to zero", Toast.LENGTH_SHORT).show()
+                                        },
+                                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+                                    ) {
+                                        Text("Reset", style = MaterialTheme.typography.labelSmall)
+                                    }
+                                }
+
+                                Spacer(modifier = Modifier.height(10.dp))
+
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                                ) {
+                                    Surface(
+                                        shape = RoundedCornerShape(10.dp),
+                                        color = Color.Black.copy(alpha = 0.3f),
+                                        modifier = Modifier.weight(1f)
+                                    ) {
+                                        Column(modifier = Modifier.padding(12.dp)) {
+                                            Text(
+                                                text = "File Server (:8080)",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                fontWeight = FontWeight.Bold,
+                                                color = MaterialTheme.colorScheme.primary
+                                            )
+                                            Spacer(modifier = Modifier.height(4.dp))
+                                            Text(
+                                                text = "Tx: ${StorageMaintenanceHelper.formatBytes(webfsTx)}",
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = Color(0xFF10B981)
+                                            )
+                                            Text(
+                                                text = "Rx: ${StorageMaintenanceHelper.formatBytes(webfsRx)}",
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = Color(0xFF38BDF8)
+                                            )
+                                        }
+                                    }
+
+                                    Surface(
+                                        shape = RoundedCornerShape(10.dp),
+                                        color = Color.Black.copy(alpha = 0.3f),
+                                        modifier = Modifier.weight(1f)
+                                    ) {
+                                        Column(modifier = Modifier.padding(12.dp)) {
+                                            Text(
+                                                text = "HTTP Proxy (:8081)",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                fontWeight = FontWeight.Bold,
+                                                color = Color(0xFFF59E0B)
+                                            )
+                                            Spacer(modifier = Modifier.height(4.dp))
+                                            Text(
+                                                text = "Tx: ${StorageMaintenanceHelper.formatBytes(proxyTx)}",
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = Color(0xFF10B981)
+                                            )
+                                            Text(
+                                                text = "Rx: ${StorageMaintenanceHelper.formatBytes(proxyRx)}",
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = Color(0xFF38BDF8)
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        // AirPlay & DLNA Casting Card
+                        Surface(
+                            shape = RoundedCornerShape(16.dp),
+                            color = Color(0xFF1E293B).copy(alpha = 0.5f),
+                            border = BorderStroke(1.dp, Color.White.copy(alpha = 0.05f)),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(modifier = Modifier.padding(16.dp)) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Icon(
+                                            imageVector = Icons.Default.Cast,
+                                            contentDescription = null,
+                                            tint = Color(0xFFA855F7),
+                                            modifier = Modifier.size(20.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Text(
+                                            text = "AirPlay & DLNA Casting",
+                                            style = MaterialTheme.typography.titleMedium,
+                                            fontWeight = FontWeight.Bold,
+                                            color = Color.White
+                                        )
+                                    }
+                                    if (activeCaster != null) {
+                                        Surface(
+                                            shape = RoundedCornerShape(6.dp),
+                                            color = Color(0xFFA855F7).copy(alpha = 0.25f)
+                                        ) {
+                                            Text(
+                                                text = "Connected",
+                                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                                style = MaterialTheme.typography.labelSmall,
+                                                fontWeight = FontWeight.Bold,
+                                                color = Color(0xFFA855F7)
+                                            )
+                                        }
+                                    }
+                                }
+
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Text(
+                                    text = "Discovered smart TVs and receivers on the current subnet via mDNS/SSDP.",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = Color.LightGray
+                                )
+
+                                Spacer(modifier = Modifier.height(12.dp))
+
+                                if (discoveredDevices.isEmpty()) {
+                                    Text(
+                                        text = "Searching for cast devices on local network...",
+                                        color = Color.Gray,
+                                        style = MaterialTheme.typography.bodySmall
+                                    )
+                                } else {
+                                    discoveredDevices.forEach { device ->
+                                        val isCur = activeCaster?.deviceId == device.deviceId
+                                        Surface(
+                                            shape = RoundedCornerShape(8.dp),
+                                            color = if (isCur) Color(0xFFA855F7).copy(alpha = 0.2f) else Color.Black.copy(alpha = 0.25f),
+                                            border = BorderStroke(1.dp, if (isCur) Color(0xFFA855F7) else Color.Transparent),
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(vertical = 3.dp)
+                                                .clickable { CastingState.activeCaster.value = device }
+                                        ) {
+                                            Row(
+                                                modifier = Modifier.padding(10.dp),
+                                                horizontalArrangement = Arrangement.SpaceBetween,
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                Column {
+                                                    Text(device.deviceName, color = Color.White, fontWeight = FontWeight.Bold)
+                                                    Text(device.deviceId, color = Color.Gray, style = MaterialTheme.typography.bodySmall)
+                                                }
+                                                if (isCur) {
+                                                    Icon(Icons.Default.Check, contentDescription = "Active", tint = Color(0xFFA855F7))
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
                         }
                     }
                 }
@@ -1286,98 +2351,5 @@ fun HostAndToolsContent(onClose: () -> Unit) {
             }
         )
     }
-
-    // Storage Permission Onboarding Rationale Dialog
-    if (showPermissionRationale) {
-        AlertDialog(
-            onDismissRequest = { showPermissionRationale = false },
-            icon = {
-                Icon(
-                    imageVector = Icons.Default.Info,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(32.dp)
-                )
-            },
-            title = {
-                Text(
-                    text = "Storage Access Required",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold
-                )
-            },
-            text = {
-                Column(modifier = Modifier.fillMaxWidth()) {
-                    Text(
-                        text = "File Mate turns your device into a high-speed local file server. To host, share, and manage files over Wi-Fi and perform storage cleanups, File Mate requires All Files Access.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                    Spacer(modifier = Modifier.height(12.dp))
-                    Surface(
-                        shape = RoundedCornerShape(8.dp),
-                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text(
-                            text = "🔒 Privacy Guarantee: All file sharing and maintenance occur 100% locally on your Wi-Fi network. No external servers or cloud uploads.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(10.dp)
-                        )
-                    }
-                }
-            },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        showPermissionRationale = false
-                        val intent = Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION).apply {
-                            data = Uri.parse("package:${context.packageName}")
-                        }
-                        manageStorageLauncher.launch(intent)
-                    }
-                ) {
-                    Text("Continue to Settings")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showPermissionRationale = false }) {
-                    Text("Not Now")
-                }
-            }
-        )
-    }
-    }
 }
 
-@Composable
-fun StatCard(title: String, txLine: String, rxLine: String) {
-    Surface(
-        shape = RoundedCornerShape(16.dp),
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-        modifier = Modifier.width(155.dp)
-    ) {
-        Column(
-            modifier = Modifier.padding(16.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            Text(
-                text = title,
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.primary,
-                fontWeight = FontWeight.Bold
-            )
-            Spacer(modifier = Modifier.height(8.dp))
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(text = "↑ ", style = MaterialTheme.typography.bodySmall, color = Color(0xFF10B981), fontWeight = FontWeight.Bold)
-                Text(text = txLine, style = MaterialTheme.typography.bodySmall, color = Color.White)
-            }
-            Spacer(modifier = Modifier.height(2.dp))
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(text = "↓ ", style = MaterialTheme.typography.bodySmall, color = Color(0xFF6366F1), fontWeight = FontWeight.Bold)
-                Text(text = rxLine, style = MaterialTheme.typography.bodySmall, color = Color.LightGray)
-            }
-        }
-    }
-}

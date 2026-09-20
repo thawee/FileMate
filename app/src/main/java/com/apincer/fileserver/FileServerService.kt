@@ -14,14 +14,23 @@ import android.os.IBinder
 import androidx.core.app.NotificationCompat
 import android.util.Log
 import com.apincer.fileserver.http.NioHttpServer
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import java.io.File
 
 class FileServerService : Service() {
 
     companion object {
+        private val _isRunningFlow = MutableStateFlow(false)
+        val isRunningFlow: StateFlow<Boolean> = _isRunningFlow.asStateFlow()
+
         @Volatile
         var isRunning = false
-            private set
+            private set(value) {
+                field = value
+                _isRunningFlow.value = value
+            }
 
         @Volatile
         var sharedRoot: File? = null
@@ -273,7 +282,15 @@ class FileServerService : Service() {
             "\"1.0\""
         }
         val uptimeSeconds = (System.currentTimeMillis() - serverStartTime) / 1000
-        return "{\"model\":$model,\"osVersion\":$os,\"apiLevel\":$api,\"proxyPort\":$PROXY_PORT,\"appVersion\":$version,\"uptimeSeconds\":$uptimeSeconds}"
+        var totalBytes = 0L
+        var freeBytes = 0L
+        try {
+            val targetPath = (sharedRoot ?: android.os.Environment.getExternalStorageDirectory()).absolutePath
+            val stat = android.os.StatFs(targetPath)
+            totalBytes = stat.totalBytes
+            freeBytes = stat.availableBytes
+        } catch (_: Exception) {}
+        return "{\"model\":$model,\"osVersion\":$os,\"apiLevel\":$api,\"proxyPort\":$PROXY_PORT,\"appVersion\":$version,\"uptimeSeconds\":$uptimeSeconds,\"totalBytes\":$totalBytes,\"freeBytes\":$freeBytes}"
     }
 
     private fun filesResponse(query: String): NioHttpServer.HttpResponse {

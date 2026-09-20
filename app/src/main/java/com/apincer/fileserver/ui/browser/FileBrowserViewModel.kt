@@ -103,19 +103,19 @@ class FileBrowserViewModel : ViewModel() {
                 
             mappedFiles = when (sortOpt) {
                 SortOption.NAME -> if (sortOrd == SortOrder.ASCENDING) {
-                    mappedFiles.sortedWith(compareBy({ !it.isDirectory }, { it.name.lowercase() }))
+                    mappedFiles.sortedWith(compareBy<FileItem>({ !it.isDirectory }).thenBy { it.name.lowercase() })
                 } else {
-                    mappedFiles.sortedWith(compareBy({ !it.isDirectory }, { it.name.lowercase() })).reversed()
+                    mappedFiles.sortedWith(compareBy<FileItem>({ !it.isDirectory }).thenByDescending { it.name.lowercase() })
                 }
                 SortOption.SIZE -> if (sortOrd == SortOrder.ASCENDING) {
-                    mappedFiles.sortedWith(compareBy({ !it.isDirectory }, { it.size }))
+                    mappedFiles.sortedWith(compareBy<FileItem>({ !it.isDirectory }).thenBy { it.size })
                 } else {
-                    mappedFiles.sortedWith(compareBy({ !it.isDirectory }, { it.size })).reversed()
+                    mappedFiles.sortedWith(compareBy<FileItem>({ !it.isDirectory }).thenByDescending { it.size })
                 }
                 SortOption.DATE -> if (sortOrd == SortOrder.ASCENDING) {
-                    mappedFiles.sortedWith(compareBy({ !it.isDirectory }, { it.lastModified }))
+                    mappedFiles.sortedWith(compareBy<FileItem>({ !it.isDirectory }).thenBy { it.lastModified })
                 } else {
-                    mappedFiles.sortedWith(compareBy({ !it.isDirectory }, { it.lastModified })).reversed()
+                    mappedFiles.sortedWith(compareBy<FileItem>({ !it.isDirectory }).thenByDescending { it.lastModified })
                 }
             }
                 

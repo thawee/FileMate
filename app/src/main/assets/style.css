@@ -1633,3 +1633,68 @@ a:focus-visible {
 }
 .preview-nav-arrow.prev { left: 20px; }
 .preview-nav-arrow.next { right: 20px; }
+
+/* Right-Click Context Menu */
+.context-menu {
+    position: fixed;
+    z-index: 3000;
+    background: rgba(15, 23, 42, 0.96);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 12px;
+    box-shadow: 0 10px 30px -5px rgba(0, 0, 0, 0.6), 0 8px 10px -6px rgba(0, 0, 0, 0.5);
+    padding: 0.35rem;
+    min-width: 180px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    animation: fadeInMenu 0.12s ease-out;
+}
+
+.context-menu button {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    width: 100%;
+    padding: 0.5rem 0.75rem;
+    border: none;
+    background: transparent;
+    color: var(--text-color);
+    font-size: 0.85rem;
+    font-family: inherit;
+    border-radius: 6px;
+    cursor: pointer;
+    text-align: left;
+    white-space: nowrap;
+    transition: background 0.15s ease, color 0.15s ease;
+}
+
+.context-menu button:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: #ffffff;
+}
+
+.context-menu button.menu-delete {
+    color: #f87171;
+}
+
+.context-menu button.menu-delete:hover {
+    background: rgba(239, 68, 68, 0.15);
+    color: #fca5a5;
+}
+
+.light-theme .context-menu {
+    background: rgba(255, 255, 255, 0.98);
+    border-color: rgba(0, 0, 0, 0.12);
+    box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.15);
+}
+
+.light-theme .context-menu button {
+    color: #334155;
+}
+
+.light-theme .context-menu button:hover {
+    background: rgba(0, 0, 0, 0.05);
+    color: #0f172a;
+}

@@ -1,49 +1,84 @@
-# Fix: Hotspot IP Detection & Dynamic Network IP Refresh
+# Step-by-Step UI/UX Implementation Plan: FileMate (Android & WebUI)
 
-## Root Cause Analysis
-1. **Cellular (Mobile Carrier) IP Leakage:**
-   - In `getLocalIpAddresses()`, network interfaces are enumerated without checking `networkInterface.isUp` or distinguishing between local LAN/hotspot interfaces and cellular WAN interfaces.
-   - Cellular carrier interfaces (`rmnet*`, `ccmni*`, `pdp*`, `wwan*`, `ppp*`) assign private/CGNAT IPv4 addresses (e.g. `10.112.12.215`). Mobile carriers block inbound traffic, and Android's tethering firewall blocks hotspot clients from accessing cellular IPs.
-   - These cellular IPs were accepted and prioritized or fallen back to as the primary server IP.
-2. **Stale/Static IP Caching in UI:**
-   - In `MainActivity.kt`: `val localIps = remember { getLocalIpAddresses() }` had no keys or triggers.
-   - When the app is opened before turning on the Hotspot, `localIps` was evaluated once and cached permanently.
-   - Turning on the hotspot, starting the server, or switching networks never invalidated or updated `localIps`, leaving stale or cellular IPs visible on the QR code and URL cards.
-3. **No Automatic Network Change Listener:**
-   - The UI lacked a lifecycle / connectivity listener (`ConnectivityManager.NetworkCallback` or resume effect) to refresh IP addresses when the user turns on Hotspot or connects to Wi-Fi while using the app.
+## Phase 1: High-Impact Usability & Performance Fixes (Immediate)
+- [x] **1. WebUI Thumbnail Performance & JS Bug Fix**
+  - [x] 1.1 Use `/api/thumbnail` for list & grid preview thumbnails (preventing massive multi-MB RAW photo downloads) with graceful fallback.
+  - [x] 1.2 Fix uncaught runtime JS `ReferenceError: closeToolsModal is not defined` on Escape key and click listeners.
+- [x] **2. Android Sorting & Media Deletion Polish**
+  - [x] 2.1 Fix descending sorting comparator in `FileBrowserViewModel.kt` so directories stay pinned to top on all sort criteria.
+  - [x] 2.2 Fix photo deletion in `PreviewScreen.kt` so deleting an image transitions smoothly to the adjacent image instead of ejecting user back to the top of the file list.
+- [x] **3. Android Native File Management Actions**
+  - [x] 3.1 Add "New Folder" action with dialog in `FileBrowserScreen.kt`.
+  - [x] 3.2 Expand `FileContextMenu` in Android to support "Rename", "File Details / Properties", and safe delete dialog.
 
-## Tasks
-- [x] **1. Enhance `getLocalIpAddresses()` with Cellular Filtering & Prioritization (`MainActivity.kt` & `NetworkUtils.kt`)**
-  - Checked `networkInterface.isUp` and non-loopback.
-  - Excluded cellular carrier WAN interfaces (`rmnet`, `ccmni`, `pdp`, `ppp`, `wwan`, `cellular`, `qmimux`, `clat`, `radio`) from local file sharing.
-  - Prioritized Hotspot / AP interfaces (`ap`, `softap`, `swlan`, `tether`) and Wi-Fi (`wlan`, `eth`, `rndis`).
-  - Prioritized standard local gateway subnets (e.g., `192.168.43.1`).
-- [x] **2. Make IP Detection Dynamic & Reactive (`MainActivity.kt`)**
-  - Replaced static `remember { getLocalIpAddresses() }` with reactive `networkAddresses` state.
-  - Automatically refreshes IP list upon starting/stopping the server.
-  - Implemented `DisposableEffect` with `ConnectivityManager.NetworkCallback` and app lifecycle `ON_RESUME` to auto-refresh local IPs whenever network interfaces change.
-  - Added a manual refresh button on the URL card for instant user verification.
-  - Added multi-interface filter chips when multiple local networks exist (e.g. Hotspot + Wi-Fi).
-  - Added an offline warning if no active Wi-Fi or Hotspot is available.
-- [x] **3. Verification & Testing**
-  - Added unit tests in `NetworkUtilsTest.kt` for cellular filtering and hotspot prioritization.
-  - Ran `./gradlew testDebugUnitTest` — all tests passed.
-  - Ran `./gradlew assembleDebug` — APK built cleanly with 0 errors.
+## Phase 2: UX Streamlining & Productivity Features
+- [x] **4. WebUI Table Clutter Reduction & Right-Click Context Menu**
+  - [x] 4.1 Replace 6 colored badge buttons per row with a streamlined hover action set + `•••` action dropdown.
+  - [x] 4.2 Add desktop-grade Right-Click Context Menu for both grid cards and table rows.
+- [x] **5. WebUI Rename, ZIP Extraction & Shift-Select**
+  - [x] 5.1 Add true "Rename" modal and connect `/api/rename`.
+  - [x] 5.2 Add "Extract ZIP" button to `.zip` files calling `/api/unzip`.
+  - [x] 5.3 Add Shift-click range selection for multi-file operations.
+- [x] **6. Device Storage Gauge (Backend & WebUI)**
+  - [x] 6.1 Add `StatFs` (freeBytes, totalBytes) to `/api/system` in `FileServerService.kt`.
+  - [x] 6.2 Display storage usage bar in WebUI header (`💾 42.8 GB free of 128 GB`).
 
-## Review & Summary
-- **Root Cause Identified:**
-  - Android assigned the cellular mobile data interface (`rmnet_data0`) an internal CGNAT IP (`10.112.12.215`).
-  - Because `getLocalIpAddresses()` did not exclude cellular interfaces and `WebFSScreen` cached the IP list with `remember { getLocalIpAddresses() }` on startup, the cellular IP was mistakenly displayed instead of the Hotspot address.
-  - Inbound traffic to cellular carrier IPs is blocked by carriers and Android firewall.
-- **Solution Implemented:**
-  - Created `NetworkUtils.kt` to classify network interfaces (`HOTSPOT`, `WIFI`, `ETHERNET`, `USB_TETHERING`, `CELLULAR`), strictly filter out cellular WAN interfaces, and rank Hotspot (`192.168.43.1` or `ap*`) at highest priority.
-  - Updated `MainActivity.kt` to dynamically listen to network changes via `ConnectivityManager.NetworkCallback` and `LifecycleEventObserver` (`ON_RESUME`), and refresh IPs on server start/stop.
-  - Added an interactive refresh button and interface selector chips in the Connection Details Card.
-  - Added unit test suite `NetworkUtilsTest.kt`.
-- **Verification:**
-  - Unit tests in `NetworkUtilsTest.kt` passed with code 0.
-  - Debug APK built successfully with `./gradlew assembleDebug`.
+## Phase 3: Premium Polish & Delight (Apple / Linear Grade)
+- [x] **7. Android Server Dashboard & Identity Enhancement**
+  - [x] 7.1 Add persistent Server Status / Quick-Action card at the top of the Android main screen (IP, 1-tap QR, Start/Stop toggle).
+  - [x] 7.2 Semantic colorful file-type icons in Android list/grid (PDF, Code, Audio, Video, Zip, APK).
+- [x] **8. Slideshow Integration & Polish**
+  - [x] 8.1 Wire up `PremiumSlideshowScreen.kt` with parallax transitions, timer selection, and presentation mode.
+- [x] **9. WebUI Visual Polish**
+  - [x] 9.1 Replace emojis with crisp vector SVG icons and enhance glassmorphic card styling.
+- [x] **10. Verification & Validation**
+  - [x] 10.1 Run unit tests (`./gradlew testDebugUnitTest`).
+  - [x] 10.2 Assemble debug build (`./gradlew assembleDebug`).
+  - [x] 10.3 Verify WebUI in browser.
 
+## Phase 4: Dedicated Tools & Proxy Hub Refactoring
+- [x] **11. Refactor Tools & Proxy Hub Architecture**
+  - [x] 11.1 Rebrand `HostAndToolsContent` into `ToolsAndProxyHubContent`: Removed redundant giant start/stop button & duplicate QR code (now cleanly handled by home screen `ServerDashboardCard`).
+  - [x] 11.2 Tab 0 (HTTP Proxy Suite): Active port 8081 status, 1-tap copy endpoint, developer CLI curl/export snippets, OS-specific setup guides (iOS, Android, macOS, Windows), and real-time Proxy bandwidth monitor.
+  - [x] 11.3 Tab 1 (Storage Maintenance): Dynamic device capacity breakdown via `StatFs`, 1-click empty folder cleaner, 1-click desktop/OS junk purge (.DS_Store, Thumbs.db, *.tmp) with live progress and completion details dialog.
+  - [x] 11.4 Tab 2 (Security & Network Diagnostics): WebUI security PIN manager with 1-tap copy and instant regenerate (`AuthHelper.generateNewPin()`), network adapter inspector (Wi-Fi, Hotspot, USB Tethering, Ethernet), live throughput monitor with counter reset, and media casting scanner.
+  - [x] 11.5 TopAppBar action icon & Home Dashboard linkage: Updated icon from generic Settings to `Icons.Default.Build` ("Tools & Proxy Hub"), added quick "Proxy :8081" and "Storage Cleaner" action chips to home screen `ServerDashboardCard`.
+  - [x] 11.6 Validation: Compile and run test suite (`./gradlew testDebugUnitTest` passed with 0 errors & `./gradlew assembleDebug` built successfully).
 
+## Phase 5: Barcode Dialog Login Credentials & Auto-Login
+- [x] **12. Barcode / QR Dialog Login Credentials & Auto-Login**
+  - [x] 12.1 Update `script.js` to process `?pin=...` on startup, call `/api/auth?pin=...` to set session cookie, and clean the address bar with `history.replaceState`.
+  - [x] 12.2 Update `QuickQrDialog` in `MainActivity.kt` to encode auto-login URL (`$url/?pin=$pin`), display credentials card (Username: `admin`, PIN badge, 1-tap copy, 1-tap regenerate), and clear instructions.
+  - [x] 12.3 Connect `currentPin` from `AuthHelper` to `QuickQrDialog` in `WebFSScreen`.
+  - [x] 12.4 Validation: Test unit tests and build debug APK (`testDebugUnitTest` & `assembleDebug` passed).
 
-
+---
+## Review & Results Summary
+- **Barcode / QR Dialog & Auto-Login:**
+  - `QuickQrDialog` encodes the seamless auto-login URL (`http://$primaryIp:8080/?pin=$pin`) directly into the generated QR code.
+  - WebUI `script.js` extracts `?pin=...` on initial load, exchanges it with `/api/auth` to set an authenticated HttpOnly session cookie, and immediately cleans the browser URL bar via `history.replaceState` so PIN is not leaked or saved in browser history.
+  - Camera scans from mobile phones or tablets authenticate automatically with zero login popups.
+  - For desktop PC browsers, `QuickQrDialog` now presents a dedicated **Login Credentials Card**: Username `admin` (with 1-tap copy), 4-digit PIN badge (with 1-tap copy and 1-tap regenerate button), and direct web URL.
+- **Tools & Proxy Hub (Android):**
+  - Dedicated modern modal focused 100% on utilities and proxy networking instead of duplicating the server start/stop dashboard.
+  - **Tab 0 (HTTP Proxy Suite):** High-visibility Port 8081 endpoint card with 1-tap copy, live Tx/Rx bandwidth tracking, shell CLI snippets (`export http_proxy=...` and `curl -x ...`), and comprehensive client configuration guides for iOS, Android, macOS, and Windows.
+  - **Tab 1 (Storage Maintenance):** Live Android `StatFs` storage capacity meter with % used progress bar, 1-click empty directory cleaner (with protected system folders safeguards), and 1-click OS junk purge (.DS_Store, Thumbs.db, Desktop.ini, *.tmp, *.bak) with live progress and detailed results dialog.
+  - **Tab 2 (Network & Security Diagnostics):** WebUI 4-digit security PIN manager with 1-tap regenerate, active network adapter inspector with IP interface switcher (Wi-Fi, Hotspot, USB Tethering, Ethernet), live bandwidth monitor with reset button, and AirPlay/DLNA device discovery.
+  - **Home Screen Dashboard Linkage:** Added 1-tap quick action chips directly on `ServerDashboardCard` for `Proxy :8081` and `Storage Cleaner`, plus updated TopAppBar action icon to `Icons.Default.Build`.
+- **Android Usability:**
+  - Pinned Server Dashboard Card at top of home screen with pulsing running status, active local IP pill, 1-tap URL copy, quick QR dialog, and live start/stop switch.
+  - Directories strictly pinned to the top across all sort modes (Name, Size, Date - ascending & descending).
+  - Deleting an image in fullscreen preview seamlessly transitions to adjacent photo instead of ejecting user.
+  - Native "New Folder", "Rename", and "Properties" dialogs added to Compose UI.
+  - Integrated `PremiumSlideshowScreen.kt` with parallax transitions, timer selector, and presentation controls into PreviewScreen & mini-player.
+  - Color-coded file-type badges (PDF red, Audio purple, Archive orange, Code teal, APK green, Doc blue) replace generic gray icons in both grid and list.
+- **WebUI Usability:**
+  - Thumbnails load via `/api/thumbnail` for instantaneous directory rendering without downloading heavy camera RAW/JPEG originals.
+  - Desktop-grade right-click context menu and clean `•••` action dropdowns replaced rows of 6 cluttered badge buttons.
+  - Added true "Rename" and "Extract ZIP" modals wired to backend endpoints.
+  - Added Shift-click range multi-selection.
+  - Added real-time device storage meter in header using Android `StatFs`.
+  - Replaced platform-inconsistent emojis with crisp inline SVG icons.
+- **Validation:**
+  - Unit tests: `25 actionable tasks, BUILD SUCCESSFUL`.
+  - Debug APK: `assembleDebug BUILD SUCCESSFUL`.

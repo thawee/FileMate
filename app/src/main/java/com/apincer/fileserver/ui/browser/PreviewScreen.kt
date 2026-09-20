@@ -55,9 +55,10 @@ fun PreviewScreen(
     initialIndex: Int,
     mediaFiles: List<FileItem>,
     onClose: () -> Unit,
-    onFileDeleted: () -> Unit,
+    onFileDeleted: (Int) -> Unit,
     onFileResized: () -> Unit,
-    discoveredDevices: List<TvCaster> = emptyList()
+    discoveredDevices: List<TvCaster> = emptyList(),
+    onStartSlideshow: (() -> Unit)? = null
 ) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
@@ -66,6 +67,7 @@ fun PreviewScreen(
     
     var isUiVisible by remember { mutableStateOf(true) }
     var showInfoSheet by remember { mutableStateOf(false) }
+    var showDeleteDialog by remember { mutableStateOf(false) }
     var castStatus by remember { mutableStateOf("") }
     val showCastSheet by CastingState.showCastSheet.collectAsState()
 
@@ -241,20 +243,15 @@ fun PreviewScreen(
                         }
 
                         // Delete
-                        IconButton(onClick = {
-                            coroutineScope.launch(Dispatchers.IO) {
-                                if (currentFile.file.delete()) {
-                                    withContext(Dispatchers.Main) {
-                                        Toast.makeText(context, "Deleted", Toast.LENGTH_SHORT).show()
-                                        if (mediaFiles.size == 1) {
-                                            onClose()
-                                        }
-                                        onFileDeleted()
-                                    }
-                                }
-                            }
-                        }) {
+                        IconButton(onClick = { showDeleteDialog = true }) {
                             Icon(Icons.Default.Delete, contentDescription = "Delete", tint = Color.White)
+                        }
+
+                        // Slideshow
+                        if (onStartSlideshow != null) {
+                            IconButton(onClick = { onStartSlideshow.invoke() }) {
+                                Icon(Icons.Default.Slideshow, contentDescription = "Slideshow", tint = Color.White)
+                            }
                         }
 
                         // Cast
@@ -315,6 +312,48 @@ fun PreviewScreen(
                         Text("MIME Type: ${currentFile.mimeType}")
                     }
                 }
+            }
+        }
+
+        if (showDeleteDialog) {
+            val currentFile = mediaFiles.getOrNull(pagerState.currentPage)
+            if (currentFile != null) {
+                AlertDialog(
+                    onDismissRequest = { showDeleteDialog = false },
+                    title = { Text("Delete File?") },
+                    text = { Text("Are you sure you want to delete '${currentFile.name}'? This cannot be undone.") },
+                    confirmButton = {
+                        Button(
+                            onClick = {
+                                val targetIdx = pagerState.currentPage
+                                coroutineScope.launch(Dispatchers.IO) {
+                                    if (currentFile.file.delete()) {
+                                        withContext(Dispatchers.Main) {
+                                            Toast.makeText(context, "Deleted ${currentFile.name}", Toast.LENGTH_SHORT).show()
+                                            if (mediaFiles.size <= 1) {
+                                                onClose()
+                                            }
+                                            onFileDeleted(targetIdx)
+                                        }
+                                    } else {
+                                        withContext(Dispatchers.Main) {
+                                            Toast.makeText(context, "Failed to delete ${currentFile.name}", Toast.LENGTH_SHORT).show()
+                                        }
+                                    }
+                                }
+                                showDeleteDialog = false
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                        ) {
+                            Text("Delete")
+                        }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { showDeleteDialog = false }) {
+                            Text("Cancel")
+                        }
+                    }
+                )
             }
         }
 
