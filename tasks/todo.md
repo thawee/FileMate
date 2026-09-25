@@ -52,6 +52,26 @@
   - [x] 12.3 Connect `currentPin` from `AuthHelper` to `QuickQrDialog` in `WebFSScreen`.
   - [x] 12.4 Validation: Test unit tests and build debug APK (`testDebugUnitTest` & `assembleDebug` passed).
 
+## Phase 6: Fix audited functional and UI/UX issues (September 2026)
+**Objective:** Resolve all nine findings reported in the read-only audit without changing unrelated behavior.
+- [x] Reproduce and fix incomplete HTTP request bodies; verify multi-read uploads with a regression test.
+- [x] Make ZIP extraction avoid silent overwrites and partial results; test conflicts and failed archives.
+- [x] Restrict native create/rename to single safe file names; test traversal inputs.
+- [x] Replace comma-delimited web batch names with an unambiguous request format; test comma names for each affected action.
+- [x] Correct nested-file QR download URLs; test nested paths.
+- [x] Prevent stale browser listings and distinguish unreadable folders from empty folders; test rapid updates and error state.
+- [x] Route the Tools server switch through the same permission gate and accurate running state as the dashboard.
+- [x] Add a confirmation/preview before purging junk files.
+- [x] Save resized images with an extension matching the encoded image and avoid unsupported-file resize actions.
+- [x] Run focused regressions, full debug unit tests, debug build, JavaScript syntax check, and inspect final diff/status. Device UI verification pending: no `adb` available in this environment.
+
+## Phase 7: Document and release audited fixes (September 2026)
+**Objective:** Document the Phase 6 behavior, release it as a patch update, and commit only the related code and documentation.
+- [x] Update the README with the user-visible safety behavior and web batch/API details.
+- [x] Add a 2.1.1 changelog entry and bump Android versionName/versionCode to 2.1.1/9.
+- [x] Re-run tests, build and syntax/diff checks after release metadata edits.
+- [x] Stage only Phase 6/7 files, review staged diff, and commit; leave unrelated dependency edits unstaged.
+
 ---
 ## Review & Results Summary
 - **Barcode / QR Dialog & Auto-Login:**

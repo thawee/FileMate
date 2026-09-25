@@ -688,12 +688,16 @@ async function deleteItem(fileName) {
     }
 }
 
-let movingFileName = '';
+function nameParams(names) {
+    return names.map(name => `name=${encodeURIComponent(name)}`).join('&');
+}
+
+let movingFileNames = [];
 let movingFromPath = '';
 let moveTargetPath = '';
 
 async function openMoveModal(fileName) {
-    movingFileName = fileName;
+    movingFileNames = [fileName];
     movingFromPath = currentPath;
     moveTargetPath = '';
 
@@ -706,7 +710,7 @@ async function openMoveModal(fileName) {
 function closeMoveModal() {
     const modal = document.getElementById('moveModal');
     closeModalAnimated(modal, () => {
-        movingFileName = '';
+        movingFileNames = [];
     });
 }
 
@@ -779,12 +783,10 @@ async function loadMoveFolders() {
 }
 
 async function confirmMove() {
-    if (!movingFileName) return;
+    if (movingFileNames.length === 0) return;
 
     try {
-        const isBatch = movingFileName.includes(',');
-        const paramKey = isBatch ? 'names' : 'name';
-        const response = await fetch(`/api/move?${paramKey}=${encodeURIComponent(movingFileName)}&fromPath=${encodeURIComponent(movingFromPath)}&targetPath=${encodeURIComponent(moveTargetPath)}`, {
+        const response = await fetch(`/api/move?${nameParams(movingFileNames)}&fromPath=${encodeURIComponent(movingFromPath)}&targetPath=${encodeURIComponent(moveTargetPath)}`, {
             method: 'POST'
         });
 
@@ -858,9 +860,12 @@ async function unzipFile(fileName) {
     try {
         showToast(`Extracting ${fileName}...`, 'info');
         const resp = await fetch(`/api/unzip?path=${encodeURIComponent(currentPath)}&name=${encodeURIComponent(fileName)}`, { method: 'POST' });
-        if (!resp.ok) throw new Error('Failed to unzip');
+        if (!resp.ok) {
+            const error = await resp.json();
+            throw new Error(error.error || 'Failed to unzip');
+        }
         const res = await resp.json();
-        showToast(`Extracted ${fileName} successfully`, 'success');
+        showToast(res.errors ? `Extracted ${res.unzipped} archive(s); ${res.errors} failed` : `Extracted ${fileName} successfully`, res.errors ? 'error' : 'success');
         fetchFiles();
     } catch (e) {
         showToast('Error extracting archive: ' + e.message, 'error');
@@ -1022,13 +1027,12 @@ async function batchDeleteSelected() {
         return;
     }
 
-    const namesList = selected.map(f => f.name).join(',');
     if (!confirm(`Are you sure you want to delete ${selected.length} selected item(s)?`)) {
         return;
     }
 
     try {
-        const response = await fetch(`/api/delete?names=${encodeURIComponent(namesList)}&path=${encodeURIComponent(currentPath)}`, {
+        const response = await fetch(`/api/delete?${nameParams(selected.map(f => f.name))}&path=${encodeURIComponent(currentPath)}`, {
             method: 'POST'
         });
         if (!response.ok) throw new Error('Failed to delete items');
@@ -1054,7 +1058,7 @@ async function openBatchMoveModal() {
         return;
     }
 
-    movingFileName = selected.map(f => f.name).join(',');
+    movingFileNames = selected.map(f => f.name);
     movingFromPath = currentPath;
     moveTargetPath = '';
 
@@ -1660,8 +1664,7 @@ function batchDownloadZip() {
         showToast('No items selected for download.', 'info');
         return;
     }
-    const namesList = selected.map(f => f.name).join(',');
-    const url = `/api/download-zip?path=${encodeURIComponent(currentPath)}&names=${encodeURIComponent(namesList)}`;
+    const url = `/api/download-zip?path=${encodeURIComponent(currentPath)}&${nameParams(selected.map(f => f.name))}`;
     
     const a = document.createElement('a');
     a.href = url;

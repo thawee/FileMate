@@ -45,6 +45,10 @@ fun formatSize(size: Long): String {
     return String.format(Locale.getDefault(), "%.1f %s", size / Math.pow(1024.0, digitGroups.toDouble()), units[digitGroups])
 }
 
+fun isValidLocalFileName(name: String): Boolean =
+    name.isNotBlank() && name != "." && name != ".." &&
+        '/' !in name && '\\' !in name && '\u0000' !in name
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun FileBrowserScreen(
@@ -55,6 +59,7 @@ fun FileBrowserScreen(
 ) {
     val files by viewModel.files.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
+    val directoryError by viewModel.directoryError.collectAsState()
     val isListView by viewModel.isListView.collectAsState()
     val currentPath by viewModel.currentPath.collectAsState()
     val searchQuery by viewModel.searchQuery.collectAsState()
@@ -93,7 +98,9 @@ fun FileBrowserScreen(
                 Button(
                     onClick = {
                         val trimmed = newFolderName.trim()
-                        if (trimmed.isNotEmpty()) {
+                        if (!isValidLocalFileName(trimmed)) {
+                            Toast.makeText(context, "Enter a name without path separators", Toast.LENGTH_SHORT).show()
+                        } else {
                             val newDir = File(currentPath, trimmed)
                             if (newDir.exists()) {
                                 Toast.makeText(context, "Folder already exists", Toast.LENGTH_SHORT).show()
@@ -227,6 +234,15 @@ fun FileBrowserScreen(
                     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                         CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
                     }
+                } else if (directoryError != null) {
+                    Column(
+                        modifier = Modifier.fillMaxSize().padding(32.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center
+                    ) {
+                        Text(directoryError ?: "Cannot read this folder", textAlign = TextAlign.Center)
+                        TextButton(onClick = { viewModel.reload() }) { Text("Retry") }
+                    }
                 } else if (files.isEmpty()) {
                     Box(
                         modifier = Modifier.fillMaxSize().padding(32.dp),
@@ -357,7 +373,9 @@ fun FileContextMenu(item: FileItem, onDismiss: () -> Unit, onReload: () -> Unit)
                 Button(
                     onClick = {
                         val trimmed = renameText.trim()
-                        if (trimmed.isNotEmpty() && trimmed != item.name) {
+                        if (!isValidLocalFileName(trimmed)) {
+                            Toast.makeText(context, "Enter a name without path separators", Toast.LENGTH_SHORT).show()
+                        } else if (trimmed != item.name) {
                             val target = File(item.file.parentFile, trimmed)
                             if (target.exists()) {
                                 Toast.makeText(context, "An item with this name already exists", Toast.LENGTH_SHORT).show()

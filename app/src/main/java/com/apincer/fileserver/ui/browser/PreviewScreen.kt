@@ -1,5 +1,6 @@
 
 package com.apincer.fileserver.ui.browser
+
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.calculateZoom
@@ -48,6 +49,8 @@ import java.io.File
 import java.io.FileOutputStream
 import java.text.SimpleDateFormat
 import java.util.*
+
+fun resizedJpegName(name: String): String = "resized_${name.substringBeforeLast('.', name)}.jpg"
 
 @OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
 @Composable
@@ -222,8 +225,9 @@ fun PreviewScreen(
                             coroutineScope.launch(Dispatchers.IO) {
                                 try {
                                     val bitmap = BitmapFactory.decodeFile(currentFile.file.absolutePath)
-                                    val resized = Bitmap.createScaledBitmap(bitmap, bitmap.width / 2, bitmap.height / 2, true)
-                                    val newFile = File(currentFile.file.parent, "resized_${currentFile.name}")
+                                    val resized = Bitmap.createScaledBitmap(bitmap, (bitmap.width / 2).coerceAtLeast(1), (bitmap.height / 2).coerceAtLeast(1), true)
+                                    val newFile = File(currentFile.file.parent, resizedJpegName(currentFile.name))
+                                    if (newFile.exists()) throw IllegalStateException("${newFile.name} already exists")
                                     val out = FileOutputStream(newFile)
                                     resized.compress(Bitmap.CompressFormat.JPEG, 80, out)
                                     out.flush()

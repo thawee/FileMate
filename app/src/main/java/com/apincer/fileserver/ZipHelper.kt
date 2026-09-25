@@ -40,18 +40,19 @@ object ZipHelper {
     }
 
     fun unzipFile(inputStream: InputStream, destDir: File): Boolean {
-        if (!destDir.exists()) destDir.mkdirs()
+        if (destDir.exists() || destDir.parentFile?.isDirectory != true) return false
+        val staging = File.createTempFile("extract-", ".tmp", destDir.parentFile)
         try {
+            if (!staging.delete() || !staging.mkdir()) return false
             ZipInputStream(BufferedInputStream(inputStream)).use { zis ->
                 var entry: ZipEntry? = zis.nextEntry
                 while (entry != null) {
-                    val destFile = File(destDir, entry.name)
+                    val destFile = File(staging, entry.name)
                     // Security check against zip slip
-                    val destDirPath = destDir.canonicalPath
+                    val destDirPath = staging.canonicalPath
                     val destFilePath = destFile.canonicalPath
                     if (!destFilePath.startsWith(destDirPath + File.separator)) {
-                        entry = zis.nextEntry
-                        continue
+                        throw IOException("Invalid archive entry")
                     }
                     
                     if (entry.isDirectory) {
@@ -66,9 +67,11 @@ object ZipHelper {
                     entry = zis.nextEntry
                 }
             }
-            return true
+            return !destDir.exists() && staging.renameTo(destDir)
         } catch (e: Exception) {
             return false
+        } finally {
+            staging.deleteRecursively()
         }
     }
 }

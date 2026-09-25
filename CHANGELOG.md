@@ -4,6 +4,21 @@ All notable changes to the **File Mate** Android Application and Web Frontend fi
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to Semantic Versioning.
 
+## [2.1.1] - 2026-09-25
+
+### Fixed
+- Prevented uploads from saving only the first network read while reporting success.
+- Made ZIP extraction stage results in a new folder: existing files are never silently replaced, and failed extraction does not leave partial output. The web UI now reports extraction conflicts and failures.
+- Prevented native folder creation and rename from accepting path components such as `../`.
+- Preserved filenames containing commas in web batch delete, move, ZIP download and extraction operations; corrected QR downloads for files in subfolders.
+- Prevented older folder scans from replacing newer search or navigation results, and showed an actionable error when a folder cannot be read instead of calling it empty.
+- Applied the dashboard's storage-permission check to the Tools server switch and kept its status tied to the service state.
+- Required confirmation before permanently purging junk and backup files.
+- Opened non-image files with a compatible app rather than the image-only preview; resized images now use a `.jpg` extension matching their JPEG content.
+
+### Changed
+- Added regression tests for HTTP request bodies, extraction failure and conflicts, filename handling, QR links, load ordering and resized image names.
+
 ## [2.1.0] - 2026-09-20
 
 ### 🛠️ Tools & Proxy Hub Overhaul

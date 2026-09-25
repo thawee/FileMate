@@ -1,10 +1,10 @@
 # 📁 File Mate: Android Local File Server & Storage Maintenance Suite
 
-[![Android](https://img.shields.io/badge/Platform-Android_7.0%2B-brightgreen.svg)](https://developer.android.com)
+[![Android](https://img.shields.io/badge/Platform-Android_8.0%2B-brightgreen.svg)](https://developer.android.com)
 [![Kotlin](https://img.shields.io/badge/Language-Kotlin-blue.svg)](https://kotlinlang.org/)
 [![UI Framework](https://img.shields.io/badge/UI-Jetpack_Compose_Material_3-7F52FF.svg)](https://developer.android.com/jetpack/compose)
 [![Web Tech](https://img.shields.io/badge/Web_UI-HTML5_%7C_CSS3_%7C_JS-orange.svg)](app/src/main/assets/)
-[![Build](https://img.shields.io/badge/Build-Gradle_9.5-025E8D.svg)](build.gradle.kts)
+[![Build](https://img.shields.io/badge/Build-Gradle_9.6-025E8D.svg)](build.gradle.kts)
 [![License](https://img.shields.io/badge/License-MIT-lightgrey.svg)](LICENSE)
 
 **File Mate** is a lightweight, high-performance Android application that converts your mobile device into a local HTTP File Server with an interactive Web Dashboard and native storage maintenance tools. Part of the **Mate Series** ecosystem (`Music Mate`, `Trip Mate`, `Trading Mate`, `File Mate`).
@@ -24,10 +24,10 @@ Whether you need to transfer large files wirelessly across your local network, v
 - **Real-Time Traffic Monitor:** Tracks live Upload (`Tx`) and Download (`Rx`) speeds.
 
 ### 🛠️ Storage Maintenance & Cleaning Utilities
-- **Clean OS Junk Files:** Scans and purges system junk files (`.DS_Store`, `Thumbs.db`, `desktop.ini`, `*.tmp`, `*.bak`, `*~`, `._*`) from device storage.
+- **Clean OS Junk Files:** After confirmation, scans and permanently purges system junk files (`.DS_Store`, `Thumbs.db`, `Desktop.ini`, `*.tmp`, `*.bak`, `*~`, `._*`) from device storage. Review the warning first: backups and temporary files may contain important work.
 - **Clean Empty Directories:** Recursively identifies and deletes nested empty folders.
 - **Storage Analytics & Breakdown:** Computes category storage distribution (Images, Videos, Audio, Documents, Archives, Other) and lists the **Top 10 Largest Files**.
-- **Dual Execution:** Perform cleaning operations directly on Android via Material 3 native dialogs or remotely through the Web UI.
+- **On-Device Cleanup:** Run cleanup from the Android Tools & Proxy Hub; the web dashboard displays storage capacity but does not expose cleanup endpoints.
 
 ### 📺 Media Casting (AirPlay & DLNA)
 - **Local Network Discovery:** Uses Android `NsdManager` (mDNS) to instantly find local smart TVs, DLNA media renderers, and Apple AirPlay devices.
@@ -47,7 +47,7 @@ Whether you need to transfer large files wirelessly across your local network, v
   - **Keyboard Shortcuts:** `←`, `→` for navigation, `Space` to Play/Pause, `F` for Fullscreen, `+` / `-` to Zoom In/Out, `0` to Reset Zoom, `Delete` to Quick Delete, `Esc` to Close.
 - **Text & Code File Viewer:** Formatted code previewer for source files (`.txt`, `.json`, `.md`, `.js`, `.py`, `.html`, `.css`, `.kt`, `.java`, `.sh`, `.xml`, etc.).
 - **Drag & Drop File Uploads:** Supports binary byte stream and multipart form-data uploads up to **500 MB** per request.
-- **Batch Actions & Archives:** Batch selection for bulk moving, deleting, or **downloading as a single `.zip` file**. You can also upload a `.zip` file and extract it directly on the device.
+- **Batch Actions & Archives:** Batch selection for bulk moving, deleting, or **downloading as a single `.zip` file**, including filenames with commas. ZIP extraction creates a new destination folder; it refuses to replace an existing folder and does not publish partially extracted files.
 - **Media Thumbnails:** Generates and caches fast, memory-optimized thumbnails for image and video galleries.
 - **Recursive Search:** Instantly scan directories and their children for specific files.
 - **Animated Toast System:** Modern floating toast notifications replacing intrusive browser popups.
@@ -108,14 +108,16 @@ File Mate exposes a set of RESTful HTTP endpoints for remote management:
 
 | Endpoint | Method | Description | Query / Body Parameters |
 | :--- | :---: | :--- | :--- |
-| `/api/list` | `GET` | Retrieve directory contents | `?path=/relative/path` |
-| `/api/upload` | `POST` | Upload single or multiple files (up to 500 MB) | `?path=/relative/target/dir`<br>*(Multipart form-data or raw stream)* |
-| `/api/download` | `GET` | Download file or folder | `?path=/relative/file/path` |
-| `/api/delete` | `POST` | Delete file or directory recursively | JSON Body: `{"path": "/relative/path"}` or `{"paths": [...]}` |
-| `/api/move` | `POST` | Move/Rename file or directory | JSON Body: `{"source": "/old/path", "target": "/new/path"}` |
-| `/api/clean-empty-folders` | `POST` | Scan and remove empty nested directories | JSON Body: `{"path": "/relative/root"}` |
-| `/api/clean-junk-files` | `POST` | Scan and delete OS junk files (`.DS_Store`, `Thumbs.db`, etc.) | JSON Body: `{"path": "/relative/root"}` |
-| `/api/storage-stats` | `GET` | Fetch storage category sizes & Top 10 largest files | `?path=/relative/root` |
+| `/api/files` | `GET` | Retrieve directory contents | `?path=relative/folder` |
+| `/api/upload` | `POST` | Upload a file (up to 500 MB per request) | `?path=relative/folder&filename=photo.jpg`; raw body or multipart form-data |
+| `/api/download/{filename}` | `GET` | Download a file | `?path=relative/folder` (filename is the basename, not the full path) |
+| `/api/delete` | `POST` | Delete files or directories recursively | `?path=relative/folder&name=one.txt&name=two%2Cfinal.txt` |
+| `/api/move` | `POST` | Move files or directories | `?fromPath=source&targetPath=destination&name=one.txt&name=two%2Cfinal.txt` |
+| `/api/download-zip` | `GET` | Download selected items as ZIP | `?path=relative/folder&name=one.txt&name=two%2Cfinal.txt` |
+| `/api/unzip` | `POST` | Extract ZIP into a **new** sibling folder | `?path=relative/folder&name=archive.zip`; returns an error when the destination exists |
+| `/api/qr` | `GET` | Generate a file/folder sharing QR code | `?path=relative/folder&name=photo.jpg&isFolder=false` |
+
+For batch operations, repeat the URL-encoded `name` parameter for each complete filename; commas inside a filename are not separators. The legacy `names=first,second` form remains supported for existing clients. Authenticate through the web dashboard or use the server's Basic authentication credentials.
 
 ---
 
@@ -124,8 +126,8 @@ File Mate exposes a set of RESTful HTTP endpoints for remote management:
 ### Prerequisites
 - **Android Studio:** Jellyfish / Ladybug or newer.
 - **JDK:** Java 17 or higher.
-- **Android SDK:** API Level 24 (Android 7.0 Nougat) or higher (Target SDK 34 / 35).
-- **Gradle:** Version 9.5 (managed via Gradle Wrapper).
+- **Android SDK:** API Level 26 (Android 8.0 Oreo) or higher (target SDK 36; compile SDK 37).
+- **Gradle:** Version 9.6 (managed via Gradle Wrapper).
 
 ### Building from Source
 
@@ -167,23 +169,25 @@ File Mate exposes a set of RESTful HTTP endpoints for remote management:
 3. Browse, search (`/`), download, upload (drag & drop), view photos in slideshow mode, or read code files directly.
 
 ### 3. Run Storage Cleanup
-- **On Android:** Switch to the `🛠️ Storage Utilities` tab in the app to clean empty folders or remove OS junk files with 1 tap.
-- **On Web Dashboard:** Click **Storage Tools** in the top navigation bar to view storage breakdown analytics and execute cleanups remotely.
+- **On Android:** Open **Tools & Proxy Hub → Storage Maintenance** to clean empty folders. **Purge OS Junk Files** requires confirmation before permanently deleting matching files.
+- **On Web Dashboard:** Use the file list for uploads, downloads, moves and ZIP extraction. Storage usage is shown in the header.
 
 ---
 
 ## 🧪 Testing & Verification
 
-File Mate includes comprehensive unit tests verifying security boundary constraints, path sanitization, and junk file identification:
+File Mate includes unit tests for request-body assembly, archive extraction, batch filenames, QR URLs, native name validation, directory load ordering, image naming and security boundaries:
 
 ```bash
 ./gradlew test
 ```
 
-Unit Test Coverage (`FileServerSecurityTest.kt`):
+Examples of unit-test coverage:
 - ✅ **Path Traversal Normalization:** Verifies `../` directory escape prevention.
 - ✅ **Cross-Platform Filename Sanitization:** Validates backslash (`\`) replacement on paths.
 - ✅ **Junk File Pattern Matching:** Validates detection of `.DS_Store`, `Thumbs.db`, `desktop.ini`, `*.tmp`, `*.bak`, and `._*` files.
+- ✅ **Transfer Safety:** Validates complete upload bodies and ZIP extraction without overwrites or partial destinations.
+- ✅ **Navigation & Names:** Validates stale-load rejection, filenames containing commas, local name validation, and QR links to nested files.
 
 ---
 

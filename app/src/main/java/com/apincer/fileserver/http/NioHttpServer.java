@@ -856,6 +856,7 @@ public class NioHttpServer implements Runnable {
             if (attachment.requestData.size() - attachment.request.getHeaderEnd() >= contentLength) {
                 key.interestOps(0);
                 attachment.bodyReadStartTime = 0;  // Reset
+                attachment.request.updateBody(attachment.requestData.toByteArray());
                 workerPool.submit(() -> processRequest(key, attachment.request));
             }
         } else {
@@ -2140,6 +2141,10 @@ public class NioHttpServer implements Runnable {
                     headers.put(line.substring(0, separator).trim().toLowerCase(), line.substring(separator + 1).trim());
                 }
             }
+        }
+
+        public void updateBody(byte[] requestBytes) {
+            this.body = Arrays.copyOfRange(requestBytes, headerEnd, requestBytes.length);
         }
 
         // A method to clean the object for reuse.

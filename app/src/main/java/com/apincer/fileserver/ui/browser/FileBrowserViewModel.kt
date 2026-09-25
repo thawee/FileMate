@@ -9,8 +9,15 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.io.File
 import com.apincer.fileserver.FileServerService
+
+class DirectoryLoadGate {
+    private val generation = java.util.concurrent.atomic.AtomicInteger()
+    fun next(): Int = generation.incrementAndGet()
+    fun isCurrent(value: Int): Boolean = generation.get() == value
+}
 
 class FileBrowserViewModel : ViewModel() {
 
@@ -24,6 +31,10 @@ class FileBrowserViewModel : ViewModel() {
 
     private val _isLoading = MutableStateFlow(false)
     val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
+
+    private val _directoryError = MutableStateFlow<String?>(null)
+    val directoryError: StateFlow<String?> = _directoryError.asStateFlow()
+    private val loadGate = DirectoryLoadGate()
 
     private val _isListView = MutableStateFlow(false)
     val isListView: StateFlow<Boolean> = _isListView.asStateFlow()
@@ -73,12 +84,23 @@ class FileBrowserViewModel : ViewModel() {
     }
 
     fun loadDirectory(directory: File) {
-        if (!directory.exists() || !directory.isDirectory) return
+        val generation = loadGate.next()
+        if (_currentPath.value != directory) _files.value = emptyList()
         _currentPath.value = directory
+        _isLoading.value = true
+        _directoryError.value = null
         
         viewModelScope.launch(Dispatchers.IO) {
-            _isLoading.value = true
-            val fileList = directory.listFiles()?.toList() ?: emptyList()
+            val fileList = directory.listFiles()?.toList()
+            if (fileList == null) {
+                withContext(Dispatchers.Main) {
+                    if (loadGate.isCurrent(generation)) {
+                        _directoryError.value = "Cannot read this folder. Check storage access and try again."
+                        _isLoading.value = false
+                    }
+                }
+                return@launch
+            }
             
             val query = _searchQuery.value.lowercase()
             val sortOpt = _sortOption.value
@@ -119,8 +141,12 @@ class FileBrowserViewModel : ViewModel() {
                 }
             }
                 
-            _files.value = mappedFiles
-            _isLoading.value = false
+            withContext(Dispatchers.Main) {
+                if (loadGate.isCurrent(generation)) {
+                    _files.value = mappedFiles
+                    _isLoading.value = false
+                }
+            }
         }
     }
 

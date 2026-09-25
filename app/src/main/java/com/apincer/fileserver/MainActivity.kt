@@ -60,6 +60,7 @@ import androidx.compose.ui.draw.scale
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.core.content.FileProvider
 import com.apincer.fileserver.ui.browser.FileBrowserScreen
 import com.apincer.fileserver.ui.browser.FileBrowserViewModel
 
@@ -187,6 +188,7 @@ fun WebFSScreen() {
         val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
             if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
                 refreshAddresses()
+                viewModel.reload()
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
@@ -234,6 +236,7 @@ fun WebFSScreen() {
     ) {
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
             if (Environment.isExternalStorageManager()) {
+                viewModel.reload()
                 startServer()
             }
         }
@@ -352,6 +355,9 @@ fun WebFSScreen() {
         ) {
             ToolsAndProxyHubContent(
                 initialTab = hostToolsInitialTab,
+                onToggleServer = { shouldRun ->
+                    if (shouldRun) requestAllFilesAccessAndStart() else stopServer()
+                },
                 onClose = { showHostTools = false }
             )
         }
@@ -425,12 +431,22 @@ fun WebFSScreen() {
                         val textExtensions = listOf("txt", "md", "json", "xml", "html", "css", "js", "kt", "java", "csv", "log")
                         if (fileItem.mimeType.startsWith("text/") || ext in textExtensions) {
                             editorFileItem = fileItem
-                        } else {
-                            val mediaFiles = files.filter { !it.isDirectory && !(it.mimeType.startsWith("text/") || it.name.substringAfterLast('.', "").lowercase() in textExtensions) }
+                        } else if (fileItem.mimeType.startsWith("image/")) {
+                            val mediaFiles = files.filter { !it.isDirectory && it.mimeType.startsWith("image/") }
                             val targetIndex = mediaFiles.indexOf(fileItem).takeIf { it >= 0 } ?: 0
                             CastingState.currentIndex.value = targetIndex
                             CastingState.isPlaying.value = false
                             previewIndex = targetIndex
+                        } else {
+                            try {
+                                val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", fileItem.file)
+                                context.startActivity(Intent(Intent.ACTION_VIEW).apply {
+                                    setDataAndType(uri, fileItem.mimeType)
+                                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                })
+                            } catch (e: Exception) {
+                                Toast.makeText(context, "No app available to open this file", Toast.LENGTH_SHORT).show()
+                            }
                         }
                     }
                 )
@@ -439,8 +455,7 @@ fun WebFSScreen() {
     }
 
     previewIndex?.let { index ->
-        val textExts = listOf("txt", "md", "json", "xml", "html", "css", "js", "kt", "java", "csv", "log")
-        val mediaFiles = files.filter { !it.isDirectory && !(it.mimeType.startsWith("text/") || it.name.substringAfterLast('.', "").lowercase() in textExts) }
+        val mediaFiles = files.filter { !it.isDirectory && it.mimeType.startsWith("image/") }
         LaunchedEffect(mediaFiles) {
             val primary = com.apincer.fileserver.getLocalIpAddresses().firstOrNull() ?: "127.0.0.1"
             val slides = mediaFiles.map { file ->
@@ -1099,11 +1114,12 @@ fun QuickQrDialog(
 @Composable
 fun ToolsAndProxyHubContent(
     initialTab: Int = 0,
+    onToggleServer: (Boolean) -> Unit,
     onClose: () -> Unit
 ) {
     val context = LocalContext.current
     val clipboardManager = androidx.compose.ui.platform.LocalClipboardManager.current
-    var isServerRunning by remember { mutableStateOf(FileServerService.isRunning) }
+    val isServerRunning by FileServerService.isRunningFlow.collectAsState()
 
     val webfsRx by TrafficMonitor.webfsRxBytes.collectAsState()
     val webfsTx by TrafficMonitor.webfsTxBytes.collectAsState()
@@ -1123,6 +1139,7 @@ fun ToolsAndProxyHubContent(
     var cleaningStatus by remember { mutableStateOf("") }
 
     var showResultDialog by remember { mutableStateOf(false) }
+    var showJunkConfirmation by remember { mutableStateOf(false) }
     var resultTitle by remember { mutableStateOf("") }
     var resultSummary by remember { mutableStateOf("") }
     var resultItems by remember { mutableStateOf<List<String>>(emptyList()) }
@@ -1156,7 +1173,6 @@ fun ToolsAndProxyHubContent(
 
         val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
             if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
-                isServerRunning = FileServerService.isRunning
                 refreshAddresses()
             }
         }
@@ -1255,26 +1271,7 @@ fun ToolsAndProxyHubContent(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Switch(
                         checked = isServerRunning,
-                        onCheckedChange = { shouldRun ->
-                            if (shouldRun) {
-                                val rootUri = Uri.fromFile(Environment.getExternalStorageDirectory())
-                                val intent = Intent(context, FileServerService::class.java).apply {
-                                    putExtra("FOLDER_URI", rootUri.toString())
-                                }
-                                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
-                                    context.startForegroundService(intent)
-                                } else {
-                                    context.startService(intent)
-                                }
-                                isServerRunning = true
-                            } else {
-                                val intent = Intent(context, FileServerService::class.java).apply {
-                                    action = "STOP"
-                                }
-                                context.startService(intent)
-                                isServerRunning = false
-                            }
-                        },
+                        onCheckedChange = onToggleServer,
                         modifier = Modifier.scale(0.8f)
                     )
                     Spacer(modifier = Modifier.width(4.dp))
@@ -1799,25 +1796,7 @@ fun ToolsAndProxyHubContent(
 
                                 Button(
                                     onClick = {
-                                        val sharedDir = FileServerService.sharedRoot ?: Environment.getExternalStorageDirectory()
-                                        coroutineScope.launch(Dispatchers.IO) {
-                                            isCleaning = true
-                                            cleaningStatus = "Scanning and purging OS junk files..."
-                                            val res = StorageMaintenanceHelper.cleanJunkFiles(sharedDir, context)
-                                            withContext(Dispatchers.Main) {
-                                                isCleaning = false
-                                                cleaningStatus = ""
-                                                storageRefreshTrigger++
-                                                val freedStr = StorageMaintenanceHelper.formatBytes(res.freedBytes)
-                                                resultTitle = "🗑️ Desktop Junk Purge"
-                                                resultSummary = if (res.removedCount > 0)
-                                                    "Purged ${res.removedCount} hidden junk file(s), freeing $freedStr."
-                                                else
-                                                    "No desktop junk files (.DS_Store, Thumbs.db, *.tmp) were found."
-                                                resultItems = res.removedFiles
-                                                showResultDialog = true
-                                            }
-                                        }
+                                        showJunkConfirmation = true
                                     },
                                     enabled = !isCleaning,
                                     modifier = Modifier.fillMaxWidth(),
@@ -2293,6 +2272,38 @@ fun ToolsAndProxyHubContent(
     }
 
     // Detailed Cleanup Results Dialog
+    if (showJunkConfirmation) {
+        AlertDialog(
+            onDismissRequest = { showJunkConfirmation = false },
+            title = { Text("Purge OS Junk Files?") },
+            text = { Text("This permanently deletes .DS_Store, Thumbs.db, Desktop.ini, *.tmp, *.bak, *~ and ._* files from the selected storage folder and its subfolders. Backup and temporary files may contain work you want to keep. This cannot be undone.") },
+            confirmButton = {
+                Button(onClick = {
+                    showJunkConfirmation = false
+                    if (!isCleaning) {
+                        val sharedDir = FileServerService.sharedRoot ?: Environment.getExternalStorageDirectory()
+                        coroutineScope.launch {
+                            isCleaning = true
+                            cleaningStatus = "Scanning and purging OS junk files..."
+                            val res = withContext(Dispatchers.IO) { StorageMaintenanceHelper.cleanJunkFiles(sharedDir, context) }
+                            isCleaning = false
+                            cleaningStatus = ""
+                            storageRefreshTrigger++
+                            val freedStr = StorageMaintenanceHelper.formatBytes(res.freedBytes)
+                            resultTitle = "🗑️ Desktop Junk Purge"
+                            resultSummary = if (res.removedCount > 0)
+                                "Purged ${res.removedCount} hidden junk file(s), freeing $freedStr."
+                            else "No desktop junk files were found."
+                            resultItems = res.removedFiles
+                            showResultDialog = true
+                        }
+                    }
+                }) { Text("Delete files") }
+            },
+            dismissButton = { TextButton(onClick = { showJunkConfirmation = false }) { Text("Cancel") } }
+        )
+    }
+
     if (showResultDialog) {
         AlertDialog(
             onDismissRequest = { showResultDialog = false },
@@ -2352,4 +2363,3 @@ fun ToolsAndProxyHubContent(
         )
     }
 }
-

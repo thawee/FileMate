@@ -19,6 +19,24 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import java.io.File
 
+fun parseBatchNames(query: String): List<String> {
+    val individual = query.split('&').mapNotNull { part ->
+        if (part.substringBefore('=') == "name" && '=' in part) {
+            java.net.URLDecoder.decode(part.substringAfter('='), "UTF-8")
+        } else null
+    }.filter { it.isNotEmpty() }
+    if (individual.isNotEmpty()) return individual
+    val legacy = query.split('&').firstOrNull { it.substringBefore('=') == "names" } ?: return emptyList()
+    return java.net.URLDecoder.decode(legacy.substringAfter('=', ""), "UTF-8")
+        .split(',').map { it.trim() }.filter { it.isNotEmpty() }
+}
+
+fun downloadQrUrl(baseUrl: String, path: String, name: String): String {
+    val encodedName = java.net.URLEncoder.encode(name, "UTF-8").replace("+", "%20")
+    val encodedPath = java.net.URLEncoder.encode(path, "UTF-8")
+    return "$baseUrl/api/download/$encodedName?path=$encodedPath"
+}
+
 class FileServerService : Service() {
 
     companion object {
@@ -468,10 +486,10 @@ class FileServerService : Service() {
     private fun deleteResponse(request: NioHttpServer.HttpRequest, query: String): NioHttpServer.HttpResponse {
         val root = sharedRoot ?: return errorResponse(400, "No shared folder")
 
-        var namesStr = parseQueryParam(query, "names").ifEmpty { parseQueryParam(query, "name") }
+        var names = parseBatchNames(query)
         var subPath = parseQueryParam(query, "path")
 
-        if (namesStr.isEmpty() && request.body.isNotEmpty()) {
+        if (names.isEmpty() && request.body.isNotEmpty()) {
             val bodyStr = String(request.body, Charsets.UTF_8).trim()
             if (bodyStr.startsWith("{")) {
                 try {
@@ -479,15 +497,13 @@ class FileServerService : Service() {
                     if (jsonObj.has("names")) {
                         val arr = jsonObj.optJSONArray("names")
                         if (arr != null) {
-                            val list = mutableListOf<String>()
-                            for (i in 0 until arr.length()) list.add(arr.getString(i))
-                            namesStr = list.joinToString(",")
+                            names = (0 until arr.length()).map { arr.getString(it) }
                         } else {
-                            namesStr = jsonObj.optString("names", "")
+                            names = jsonObj.optString("names", "").split(',').filter { it.isNotEmpty() }
                         }
                     }
-                    if (namesStr.isEmpty() && jsonObj.has("name")) {
-                        namesStr = jsonObj.optString("name", "")
+                    if (names.isEmpty() && jsonObj.has("name")) {
+                        names = listOf(jsonObj.optString("name", ""))
                     }
                     if (subPath.isEmpty() && jsonObj.has("path")) {
                         subPath = jsonObj.optString("path", "")
@@ -496,16 +512,15 @@ class FileServerService : Service() {
                     // Ignore JSON parse exception
                 }
             } else if (bodyStr.contains("=")) {
-                if (namesStr.isEmpty()) namesStr = parseQueryParam(bodyStr, "names").ifEmpty { parseQueryParam(bodyStr, "name") }
+                if (names.isEmpty()) names = parseBatchNames(bodyStr)
                 if (subPath.isEmpty()) subPath = parseQueryParam(bodyStr, "path")
             }
         }
 
-        if (namesStr.isEmpty()) return errorResponse(400, "Missing filename")
+        if (names.isEmpty()) return errorResponse(400, "Missing filename")
 
         val folder = resolveFile(root, subPath) ?: return errorResponse(404, "Folder not found")
 
-        val names = namesStr.split(",").map { it.trim() }.filter { it.isNotEmpty() }
         var deletedCount = 0
         var errors = 0
 
@@ -534,8 +549,8 @@ class FileServerService : Service() {
 
     private fun moveResponse(query: String): NioHttpServer.HttpResponse {
         val root = sharedRoot ?: return errorResponse(400, "No shared folder selected")
-        val namesStr = parseQueryParam(query, "names").ifEmpty { parseQueryParam(query, "name") }
-        if (namesStr.isEmpty()) return errorResponse(400, "Missing filename")
+        val names = parseBatchNames(query)
+        if (names.isEmpty()) return errorResponse(400, "Missing filename")
 
         val fromPath = parseQueryParam(query, "fromPath")
         val targetPath = parseQueryParam(query, "targetPath")
@@ -544,7 +559,6 @@ class FileServerService : Service() {
         val destFolder = resolveFile(root, targetPath) ?: return errorResponse(404, "Target folder not found")
         if (!destFolder.isDirectory) return errorResponse(404, "Target path is not a folder")
 
-        val names = namesStr.split(",").map { it.trim() }.filter { it.isNotEmpty() }
         var movedCount = 0
         var errors = 0
 
@@ -680,10 +694,9 @@ class FileServerService : Service() {
         val subPath = parseQueryParam(query, "path")
         val folder = resolveFile(root, subPath) ?: return errorResponse(404, "Folder not found")
         
-        val namesStr = parseQueryParam(query, "names").ifEmpty { parseQueryParam(query, "name") }
-        if (namesStr.isEmpty()) return errorResponse(400, "Missing filenames")
+        val names = parseBatchNames(query)
+        if (names.isEmpty()) return errorResponse(400, "Missing filenames")
         
-        val names = namesStr.split(",").map { it.trim() }.filter { it.isNotEmpty() }
         val filesToZip = names.mapNotNull {
             if (it.contains("/") || it.contains("\\") || it == ".." || it == ".") null
             else File(folder, it).takeIf { f -> f.exists() && f.parentFile == folder }
@@ -711,25 +724,33 @@ class FileServerService : Service() {
         val subPath = parseQueryParam(query, "path")
         val folder = resolveFile(root, subPath) ?: return errorResponse(404, "Folder not found")
         
-        val namesStr = parseQueryParam(query, "names").ifEmpty { parseQueryParam(query, "name") }
-        if (namesStr.isEmpty()) return errorResponse(400, "Missing filename")
+        val names = parseBatchNames(query)
+        if (names.isEmpty()) return errorResponse(400, "Missing filename")
         
-        val names = namesStr.split(",").map { it.trim() }.filter { it.isNotEmpty() }
         var successCount = 0
+        var failureCount = 0
         
         for (name in names) {
+            if (name.contains("/") || name.contains("\\") || name == "." || name == "..") {
+                failureCount++
+                continue
+            }
             val zipFile = File(folder, name)
             if (zipFile.exists() && zipFile.isFile && zipFile.extension.lowercase() == "zip") {
                 val destDir = File(folder, zipFile.nameWithoutExtension)
-                java.io.FileInputStream(zipFile).use { fis ->
-                    if (ZipHelper.unzipFile(fis, destDir)) {
+                try {
+                    val extracted = java.io.FileInputStream(zipFile).use { fis -> ZipHelper.unzipFile(fis, destDir) }
+                    if (extracted) {
                         successCount++
                         scanMedia(destDir.absolutePath)
-                    }
+                    } else failureCount++
+                } catch (e: Exception) {
+                    failureCount++
                 }
-            }
+            } else failureCount++
         }
-        return jsonResponse("{\"status\":\"ok\",\"unzipped\":$successCount}")
+        if (failureCount > 0 && successCount == 0) return errorResponse(409, "Extraction failed or destination already exists")
+        return jsonResponse("{\"status\":\"ok\",\"unzipped\":$successCount,\"errors\":$failureCount}")
     }
 
     private fun renameResponse(query: String): NioHttpServer.HttpResponse {
@@ -918,8 +939,7 @@ class FileServerService : Service() {
         val targetUrl = if (isFolder) {
             "$baseUrl/?path=${java.net.URLEncoder.encode(path, "UTF-8")}"
         } else {
-            val downloadPath = if (path.isEmpty()) name else "$path/$name"
-            "$baseUrl/api/download/${java.net.URLEncoder.encode(downloadPath, "UTF-8")}?path=${java.net.URLEncoder.encode(path, "UTF-8")}"
+            downloadQrUrl(baseUrl, path, name)
         }
         
         try {
