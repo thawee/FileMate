@@ -36,12 +36,14 @@ function getFileTypeSvg(file, isGrid) {
     return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path><polyline points="13 2 13 9 20 9"></polyline></svg>`;
 }
 
+
 function showToast(message, type = 'info', duration = 3500) {
     const container = document.getElementById('toastContainer');
     if (!container) return;
 
     const toast = document.createElement('div');
     toast.className = `toast toast-${type}`;
+    toast.setAttribute('role', 'status');
 
     let icon = 'ℹ️';
     if (type === 'success') icon = '✅';
@@ -57,6 +59,43 @@ function showToast(message, type = 'info', duration = 3500) {
         }, 300);
     }, duration);
 }
+
+// ── Focus trap for accessibility ──────────────────────────────────────────────
+let _focusTrapModal = null;
+let _focusTrapPrev = null;
+const FOCUSABLE_SELECTORS = 'a[href], button:not([disabled]), input:not([disabled]), select, textarea, [tabindex]:not([tabindex="-1"])';
+
+function trapFocus(modalEl) {
+    if (!modalEl) return;
+    _focusTrapModal = modalEl;
+    _focusTrapPrev = document.activeElement;
+    const focusable = Array.from(modalEl.querySelectorAll(FOCUSABLE_SELECTORS));
+    if (focusable.length > 0) focusable[0].focus();
+
+    modalEl._trapKeydown = (e) => {
+        if (e.key !== 'Tab') return;
+        const elems = Array.from(modalEl.querySelectorAll(FOCUSABLE_SELECTORS));
+        if (elems.length === 0) { e.preventDefault(); return; }
+        const first = elems[0], last = elems[elems.length - 1];
+        if (e.shiftKey) {
+            if (document.activeElement === first) { e.preventDefault(); last.focus(); }
+        } else {
+            if (document.activeElement === last) { e.preventDefault(); first.focus(); }
+        }
+    };
+    modalEl.addEventListener('keydown', modalEl._trapKeydown);
+}
+
+function releaseFocus() {
+    if (_focusTrapModal && _focusTrapModal._trapKeydown) {
+        _focusTrapModal.removeEventListener('keydown', _focusTrapModal._trapKeydown);
+        _focusTrapModal._trapKeydown = null;
+    }
+    if (_focusTrapPrev && typeof _focusTrapPrev.focus === 'function') _focusTrapPrev.focus();
+    _focusTrapModal = null;
+    _focusTrapPrev = null;
+}
+// ─────────────────────────────────────────────────────────────────────────────
 
 function copyLink(fileUrl, fileName) {
     const fullUrl = window.location.origin + fileUrl;
@@ -112,6 +151,12 @@ function updateSortIndicators() {
     if (thName) thName.textContent = 'Name' + getIndicator('name');
     if (thSize) thSize.textContent = 'Size' + getIndicator('size');
     if (thTime) thTime.textContent = 'Modified' + getIndicator('time');
+
+    // Keep aria-sort in sync for screen readers
+    const ariaSort = (col) => sortCol === col ? (sortDesc ? 'descending' : 'ascending') : 'none';
+    if (thName) thName.setAttribute('aria-sort', ariaSort('name'));
+    if (thSize) thSize.setAttribute('aria-sort', ariaSort('size'));
+    if (thTime) thTime.setAttribute('aria-sort', ariaSort('time'));
 
     const selector = document.getElementById('sortSelector');
     if (selector) {
@@ -474,6 +519,7 @@ async function openPreview(fileName, fileUrl) {
     }
 
     modal.style.display = 'flex';
+    trapFocus(modal);
 }
 
 function showPlaylistImage(index) {
@@ -598,6 +644,7 @@ function closeModalAnimated(modal, onClosed) {
 
 function closePreview() {
     stopSlideshow();
+    releaseFocus();
     const modal = document.getElementById('previewModal');
     const body = document.getElementById('previewBody');
     if (document.fullscreenElement) {

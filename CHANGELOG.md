@@ -4,6 +4,19 @@ All notable changes to the **File Mate** Android Application and Web Frontend fi
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to Semantic Versioning.
 
+## [2.2.0] - 2026-09-28
+
+### 🎨 UI/UX & Functional Improvements
+- **Android Native Experience:**
+  - **Multi-Select Batch Mode:** Added long-press multi-selection with an animated bottom toolbar for batch Delete, Share, and Select All in both grid and list views.
+  - **Resize Presets Dialog:** Replaced the hardcoded resize button in the image preview with a user-friendly preset dialog offering 75%, 50%, and 25% downscaling options with tailored JPEG quality compression.
+  - **Text Editor Find Bar:** Added a toggleable animated Find bar to the built-in text editor, featuring amber highlighting, match counters, and previous/next navigation.
+  - **Preview Polish:** Added spring-physics animations to the slideshow page-indicator dots and ensured the image zoom state resets automatically when swiping between pages.
+
+- **Web UI & Accessibility:**
+  - **Offline Markdown Rendering:** Bundled `marked.min.js` locally to guarantee markdown rendering without internet access.
+  - **Accessibility Enhancements:** Added `aria-live="polite"` and `role="status"` to toast notifications, `aria-sort` indicators to table headers, and an intelligent focus trap to all modal overlays to significantly improve screen reader navigation.
+
 ## [2.1.1] - 2026-09-25
 
 ### Fixed

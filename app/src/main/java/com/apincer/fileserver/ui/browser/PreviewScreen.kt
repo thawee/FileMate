@@ -23,6 +23,7 @@ import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -71,6 +72,7 @@ fun PreviewScreen(
     var isUiVisible by remember { mutableStateOf(true) }
     var showInfoSheet by remember { mutableStateOf(false) }
     var showDeleteDialog by remember { mutableStateOf(false) }
+    var showResizeDialog by remember { mutableStateOf(false) }
     var castStatus by remember { mutableStateOf("") }
     val showCastSheet by CastingState.showCastSheet.collectAsState()
 
@@ -124,6 +126,7 @@ fun PreviewScreen(
                 val fileItem = mediaFiles[page]
                 ZoomableImage(
                     fileItem = fileItem,
+                    isCurrentPage = page == pagerState.settledPage,
                     onTap = { isUiVisible = !isUiVisible }
                 )
             }
@@ -221,28 +224,7 @@ fun PreviewScreen(
                         }
 
                         // Resize
-                        IconButton(onClick = {
-                            coroutineScope.launch(Dispatchers.IO) {
-                                try {
-                                    val bitmap = BitmapFactory.decodeFile(currentFile.file.absolutePath)
-                                    val resized = Bitmap.createScaledBitmap(bitmap, (bitmap.width / 2).coerceAtLeast(1), (bitmap.height / 2).coerceAtLeast(1), true)
-                                    val newFile = File(currentFile.file.parent, resizedJpegName(currentFile.name))
-                                    if (newFile.exists()) throw IllegalStateException("${newFile.name} already exists")
-                                    val out = FileOutputStream(newFile)
-                                    resized.compress(Bitmap.CompressFormat.JPEG, 80, out)
-                                    out.flush()
-                                    out.close()
-                                    withContext(Dispatchers.Main) {
-                                        Toast.makeText(context, "Resized & saved to ${newFile.name}", Toast.LENGTH_SHORT).show()
-                                        onFileResized()
-                                    }
-                                } catch (e: Exception) {
-                                    withContext(Dispatchers.Main) {
-                                        Toast.makeText(context, "Resize failed: ${e.message}", Toast.LENGTH_SHORT).show()
-                                    }
-                                }
-                            }
-                        }) {
+                        IconButton(onClick = { showResizeDialog = true }) {
                             Icon(Icons.Default.PhotoSizeSelectLarge, contentDescription = "Resize", tint = Color.White)
                         }
 
@@ -368,15 +350,106 @@ fun PreviewScreen(
             )
         }
 
+        // ── Resize Presets Dialog ─────────────────────────────────────────────
+        if (showResizeDialog) {
+            val currentFile = mediaFiles.getOrNull(pagerState.currentPage)
+            if (currentFile != null) {
+                data class ResizePreset(val label: String, val scale: Float, val quality: Int)
+                val presets = listOf(
+                    ResizePreset("75% — Light compression", 0.75f, 90),
+                    ResizePreset("50% — Balanced (recommended)", 0.5f, 80),
+                    ResizePreset("25% — Maximum reduction", 0.25f, 70)
+                )
+                AlertDialog(
+                    onDismissRequest = { showResizeDialog = false },
+                    title = { Text("Resize Image") },
+                    text = {
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text(
+                                "Choose a size preset. A new file will be saved alongside the original.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            presets.forEach { preset ->
+                                Surface(
+                                    shape = RoundedCornerShape(10.dp),
+                                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clickable {
+                                            showResizeDialog = false
+                                            coroutineScope.launch(Dispatchers.IO) {
+                                                try {
+                                                    val bitmap = BitmapFactory.decodeFile(currentFile.file.absolutePath)
+                                                    val newW = (bitmap.width * preset.scale).toInt().coerceAtLeast(1)
+                                                    val newH = (bitmap.height * preset.scale).toInt().coerceAtLeast(1)
+                                                    val resized = Bitmap.createScaledBitmap(bitmap, newW, newH, true)
+                                                    val suffix = when (preset.scale) {
+                                                        0.75f -> "75pct"
+                                                        0.25f -> "25pct"
+                                                        else -> "50pct"
+                                                    }
+                                                    val baseName = currentFile.name.substringBeforeLast('.', currentFile.name)
+                                                    val newFile = File(currentFile.file.parent, "resized_${suffix}_${baseName}.jpg")
+                                                    if (newFile.exists()) throw IllegalStateException("${newFile.name} already exists")
+                                                    val out = FileOutputStream(newFile)
+                                                    resized.compress(Bitmap.CompressFormat.JPEG, preset.quality, out)
+                                                    out.flush(); out.close()
+                                                    bitmap.recycle(); resized.recycle()
+                                                    withContext(Dispatchers.Main) {
+                                                        Toast.makeText(context, "Saved as ${newFile.name}", Toast.LENGTH_SHORT).show()
+                                                        onFileResized()
+                                                    }
+                                                } catch (e: Exception) {
+                                                    withContext(Dispatchers.Main) {
+                                                        Toast.makeText(context, "Resize failed: ${e.message}", Toast.LENGTH_SHORT).show()
+                                                    }
+                                                }
+                                            }
+                                        }
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Icon(
+                                            Icons.Default.PhotoSizeSelectLarge,
+                                            contentDescription = null,
+                                            tint = MaterialTheme.colorScheme.primary,
+                                            modifier = Modifier.size(20.dp)
+                                        )
+                                        Spacer(Modifier.width(10.dp))
+                                        Text(preset.label, style = MaterialTheme.typography.bodyMedium)
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    confirmButton = {},
+                    dismissButton = {
+                        TextButton(onClick = { showResizeDialog = false }) { Text("Cancel") }
+                    }
+                )
+            }
         }
-    }
+
+        } // end Box
+    } // end Dialog
 
 @Composable
-fun ZoomableImage(fileItem: FileItem, onTap: () -> Unit) {
+fun ZoomableImage(fileItem: FileItem, isCurrentPage: Boolean = true, onTap: () -> Unit) {
     var scale by remember { mutableStateOf(1f) }
     var offset by remember { mutableStateOf(androidx.compose.ui.geometry.Offset.Zero) }
     val isVideo = fileItem.mimeType.startsWith("video/") || fileItem.mimeType.startsWith("audio/")
     val context = LocalContext.current
+
+    // Reset zoom/pan when swiped away to another page
+    LaunchedEffect(isCurrentPage) {
+        if (!isCurrentPage) {
+            scale = 1f
+            offset = androidx.compose.ui.geometry.Offset.Zero
+        }
+    }
 
     Box(
         modifier = Modifier

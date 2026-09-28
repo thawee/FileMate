@@ -8,6 +8,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -54,6 +55,42 @@ class FileBrowserViewModel : ViewModel() {
     private val _showHiddenFiles = MutableStateFlow(false)
     val showHiddenFiles: StateFlow<Boolean> = _showHiddenFiles.asStateFlow()
 
+    // ── Multi-select ──────────────────────────────────────────────────────────
+    private val _selectedPaths = MutableStateFlow<Set<String>>(emptySet())
+    val selectedPaths: StateFlow<Set<String>> = _selectedPaths.asStateFlow()
+
+    val isSelectionMode: Boolean get() = _selectedPaths.value.isNotEmpty()
+
+    fun toggleSelection(path: String) {
+        _selectedPaths.update { current ->
+            if (path in current) current - path else current + path
+        }
+    }
+
+    fun clearSelection() {
+        _selectedPaths.value = emptySet()
+    }
+
+    fun selectAll() {
+        _selectedPaths.value = _files.value.map { it.path }.toSet()
+    }
+
+    /** Deletes all selected items. Returns (successCount, failCount). */
+    suspend fun deleteSelected(): Pair<Int, Int> = withContext(Dispatchers.IO) {
+        val paths = _selectedPaths.value.toList()
+        var success = 0
+        var failed = 0
+        paths.forEach { path ->
+            if (File(path).deleteRecursively()) success++ else failed++
+        }
+        withContext(Dispatchers.Main) {
+            clearSelection()
+            reload()
+        }
+        Pair(success, failed)
+    }
+    // ─────────────────────────────────────────────────────────────────────────
+
     fun toggleViewMode() {
         _isListView.value = !_isListView.value
     }
@@ -89,7 +126,8 @@ class FileBrowserViewModel : ViewModel() {
         _currentPath.value = directory
         _isLoading.value = true
         _directoryError.value = null
-        
+        clearSelection()
+
         viewModelScope.launch(Dispatchers.IO) {
             val fileList = directory.listFiles()?.toList()
             if (fileList == null) {

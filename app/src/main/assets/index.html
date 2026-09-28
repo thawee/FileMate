@@ -11,7 +11,7 @@
     <div class="background-blob blob-1"></div>
     <div class="background-blob blob-2"></div>
 
-    <div class="toast-container" id="toastContainer"></div>
+    <div class="toast-container" id="toastContainer" aria-live="polite" aria-atomic="true"></div>
 
     <div class="container glass-panel">
         <header>
@@ -82,11 +82,11 @@
             <table class="file-list">
                 <thead>
                     <tr>
-                        <th style="width: 40px; text-align: center;"><input type="checkbox" id="selectAllCheckbox" class="custom-checkbox" onclick="toggleSelectAll(this)" title="Select All"></th>
-                        <th id="thName" class="sortable" onclick="handleSort('name')">Name</th>
-                        <th id="thSize" class="sortable" onclick="handleSort('size')">Size</th>
-                        <th id="thTime" class="sortable" onclick="handleSort('time')">Modified</th>
-                        <th>Actions</th>
+                        <th style="width: 40px; text-align: center;"><input type="checkbox" id="selectAllCheckbox" class="custom-checkbox" onclick="toggleSelectAll(this)" title="Select All" aria-label="Select all files"></th>
+                        <th id="thName" class="sortable" onclick="handleSort('name')" aria-sort="ascending" role="columnheader">Name</th>
+                        <th id="thSize" class="sortable" onclick="handleSort('size')" aria-sort="none" role="columnheader">Size</th>
+                        <th id="thTime" class="sortable" onclick="handleSort('time')" aria-sort="none" role="columnheader">Modified</th>
+                        <th role="columnheader">Actions</th>
                     </tr>
                 </thead>
                 <tbody id="fileListBody">
@@ -108,7 +108,7 @@
     </div>
 
     <!-- Media Preview Modal -->
-    <div id="previewModal" class="modal-overlay" style="display: none;">
+    <div id="previewModal" class="modal-overlay" style="display: none;" role="dialog" aria-modal="true" aria-labelledby="previewTitle">
         <div class="modal-content glass-panel" style="max-width: 90vw; max-height: 90vh;">
             <div class="modal-header">
                 <div style="display: flex; align-items: center; gap: 0.75rem;">
@@ -257,7 +257,7 @@
     <!-- Global Context Menu -->
     <div id="contextMenu" class="context-menu" style="display: none;"></div>
 
-    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script src="marked.min.js"></script>
     <script src="script.js"></script>
 </body>
 </html>

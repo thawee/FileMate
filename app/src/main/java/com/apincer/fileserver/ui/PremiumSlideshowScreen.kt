@@ -12,8 +12,16 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Cast
 import androidx.compose.material.icons.filled.CastConnected
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.Pause
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Tv
 import androidx.compose.material3.*
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -24,6 +32,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -34,9 +43,6 @@ import com.apincer.fileserver.cast.TvCaster
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.math.absoluteValue
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Pause
-import androidx.compose.material.icons.filled.KeyboardArrowDown
 data class SlideItem(
     val id: String,
     val imageUrl: String,
@@ -237,16 +243,26 @@ fun PremiumSlideshowScreen(
         ) {
             repeat(slides.size) { iteration ->
                 val isSelected = pagerState.currentPage == iteration
-                val color = if (isSelected) Color.White else Color.White.copy(alpha = 0.4f)
-                val width = if (isSelected) 24.dp else 8.dp
-                
+                val dotColor by animateColorAsState(
+                    targetValue = if (isSelected) Color.White else Color.White.copy(alpha = 0.4f),
+                    animationSpec = tween(300),
+                    label = "dotColor_$iteration"
+                )
+                val dotWidth by animateDpAsState(
+                    targetValue = if (isSelected) 24.dp else 8.dp,
+                    animationSpec = spring<Dp>(
+                        dampingRatio = Spring.DampingRatioMediumBouncy,
+                        stiffness = Spring.StiffnessLow
+                    ),
+                    label = "dotWidth_$iteration"
+                )
                 Box(
                     modifier = Modifier
                         .padding(horizontal = 4.dp)
                         .clip(CircleShape)
-                        .background(color)
+                        .background(dotColor)
                         .height(8.dp)
-                        .width(width)
+                        .width(dotWidth)
                 )
             }
         }

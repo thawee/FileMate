@@ -2,8 +2,13 @@ package com.apincer.fileserver.ui.browser
 
 import android.content.Intent
 import android.widget.Toast
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.horizontalScroll
@@ -14,6 +19,7 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -37,6 +43,7 @@ import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import kotlinx.coroutines.launch
 
 fun formatSize(size: Long): String {
     if (size <= 0) return "0 B"
@@ -63,16 +70,23 @@ fun FileBrowserScreen(
     val isListView by viewModel.isListView.collectAsState()
     val currentPath by viewModel.currentPath.collectAsState()
     val searchQuery by viewModel.searchQuery.collectAsState()
-    
+    val selectedPaths by viewModel.selectedPaths.collectAsState()
+    val isSelectionMode = selectedPaths.isNotEmpty()
+
     var selectedFile by remember { mutableStateOf<FileItem?>(null) }
     var isRefreshing by remember { mutableStateOf(false) }
     var showMkdirDialog by remember { mutableStateOf(false) }
     var newFolderName by remember { mutableStateOf("") }
+    var showDeleteSelectionDialog by remember { mutableStateOf(false) }
     val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
 
-    // Intercept system back gestures to navigate up folders until root
+    // Intercept system back gestures: exit selection mode first, then navigate up
     val canGoBack = currentPath.absolutePath != viewModel.rootDir.absolutePath
-    androidx.activity.compose.BackHandler(enabled = canGoBack) {
+    androidx.activity.compose.BackHandler(enabled = isSelectionMode) {
+        viewModel.clearSelection()
+    }
+    androidx.activity.compose.BackHandler(enabled = !isSelectionMode && canGoBack) {
         viewModel.navigateUp()
     }
 
@@ -80,6 +94,7 @@ fun FileBrowserScreen(
         if (!isLoading) isRefreshing = false
     }
 
+    // ── New Folder Dialog ─────────────────────────────────────────────────────
     if (showMkdirDialog) {
         AlertDialog(
             onDismissRequest = { showMkdirDialog = false },
@@ -126,8 +141,36 @@ fun FileBrowserScreen(
         )
     }
 
+    // ── Batch Delete Confirm Dialog ───────────────────────────────────────────
+    if (showDeleteSelectionDialog) {
+        AlertDialog(
+            onDismissRequest = { showDeleteSelectionDialog = false },
+            title = { Text("Delete ${selectedPaths.size} item${if (selectedPaths.size != 1) "s" else ""}?") },
+            text = { Text("This will permanently delete all selected items. This cannot be undone.") },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showDeleteSelectionDialog = false
+                        coroutineScope.launch {
+                            val (success, failed) = viewModel.deleteSelected()
+                            val msg = if (failed == 0) "Deleted $success item${if (success != 1) "s" else ""}"
+                                      else "Deleted $success, failed $failed"
+                            Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                ) {
+                    Text("Delete")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteSelectionDialog = false }) { Text("Cancel") }
+            }
+        )
+    }
+
     Column(modifier = modifier.fillMaxSize()) {
-        // Search and Sort Bar
+        // ── Search and Sort Bar ───────────────────────────────────────────────
         Row(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically
@@ -171,7 +214,7 @@ fun FileBrowserScreen(
             }
         }
 
-        // Breadcrumbs
+        // ── Breadcrumbs ───────────────────────────────────────────────────────
         val scrollState = rememberScrollState()
         Row(
             modifier = Modifier
@@ -281,7 +324,7 @@ fun FileBrowserScreen(
                         }
                     }
                 } else {
-                    val listPadding = PaddingValues(top = 8.dp, start = 8.dp, end = 8.dp, bottom = bottomPadding + 64.dp)
+                    val listPadding = PaddingValues(top = 8.dp, start = 8.dp, end = 8.dp, bottom = bottomPadding + 80.dp)
                     if (isListView) {
                         LazyColumn(
                             contentPadding = listPadding,
@@ -290,14 +333,20 @@ fun FileBrowserScreen(
                             lazyItems(files, key = { it.path }) { item ->
                                 FileListItem(
                                     item = item,
+                                    isSelected = item.path in selectedPaths,
+                                    isSelectionMode = isSelectionMode,
                                     onClick = {
-                                        if (item.isDirectory) {
+                                        if (isSelectionMode) {
+                                            viewModel.toggleSelection(item.path)
+                                        } else if (item.isDirectory) {
                                             viewModel.loadDirectory(item.file)
                                         } else {
                                             onFileClick(item)
                                         }
                                     },
-                                    onLongClick = { selectedFile = item }
+                                    onLongClick = {
+                                        viewModel.toggleSelection(item.path)
+                                    }
                                 )
                             }
                         }
@@ -310,14 +359,20 @@ fun FileBrowserScreen(
                             items(files, key = { it.path }) { item ->
                                 FileGridItem(
                                     item = item,
+                                    isSelected = item.path in selectedPaths,
+                                    isSelectionMode = isSelectionMode,
                                     onClick = {
-                                        if (item.isDirectory) {
+                                        if (isSelectionMode) {
+                                            viewModel.toggleSelection(item.path)
+                                        } else if (item.isDirectory) {
                                             viewModel.loadDirectory(item.file)
                                         } else {
                                             onFileClick(item)
                                         }
                                     },
-                                    onLongClick = { selectedFile = item }
+                                    onLongClick = {
+                                        viewModel.toggleSelection(item.path)
+                                    }
                                 )
                             }
                         }
@@ -325,15 +380,72 @@ fun FileBrowserScreen(
                 }
             }
 
-            FloatingActionButton(
-                onClick = { newFolderName = ""; showMkdirDialog = true },
-                modifier = Modifier
-                    .align(Alignment.BottomEnd)
-                    .padding(bottom = bottomPadding + 16.dp, end = 16.dp),
-                containerColor = MaterialTheme.colorScheme.primary,
-                contentColor = Color.White
-            ) {
-                Icon(Icons.Default.CreateNewFolder, contentDescription = "New Folder")
+            // ── Batch Toolbar (shown in selection mode) ───────────────────────
+            if (isSelectionMode) {
+                Surface(
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp, vertical = 12.dp),
+                    shape = RoundedCornerShape(20.dp),
+                    color = MaterialTheme.colorScheme.surfaceVariant,
+                    shadowElevation = 12.dp,
+                    tonalElevation = 4.dp
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        // Close / count
+                        IconButton(onClick = { viewModel.clearSelection() }) {
+                            Icon(Icons.Default.Close, contentDescription = "Clear selection")
+                        }
+                        Text(
+                            text = "${selectedPaths.size} selected",
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.weight(1f)
+                        )
+                        // Select All
+                        IconButton(onClick = { viewModel.selectAll() }) {
+                            Icon(Icons.Default.SelectAll, contentDescription = "Select All", tint = MaterialTheme.colorScheme.primary)
+                        }
+                        // Share
+                        IconButton(onClick = {
+                            val uris = files
+                                .filter { it.path in selectedPaths }
+                                .map { FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", it.file) }
+                            if (uris.isNotEmpty()) {
+                                val intent = Intent(Intent.ACTION_SEND_MULTIPLE).apply {
+                                    type = "*/*"
+                                    putParcelableArrayListExtra(Intent.EXTRA_STREAM, ArrayList(uris))
+                                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                }
+                                context.startActivity(Intent.createChooser(intent, "Share ${uris.size} files"))
+                            }
+                        }) {
+                            Icon(Icons.Default.Share, contentDescription = "Share selected", tint = MaterialTheme.colorScheme.primary)
+                        }
+                        // Delete
+                        IconButton(onClick = { showDeleteSelectionDialog = true }) {
+                            Icon(Icons.Default.Delete, contentDescription = "Delete selected", tint = MaterialTheme.colorScheme.error)
+                        }
+                    }
+                }
+            }
+
+            // ── FAB: New Folder (hidden in selection mode) ────────────────────
+            if (!isSelectionMode) {
+                FloatingActionButton(
+                    onClick = { newFolderName = ""; showMkdirDialog = true },
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    contentColor = Color.White,
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .padding(bottom = bottomPadding + 16.dp, end = 16.dp)
+                ) {
+                    Icon(Icons.Default.CreateNewFolder, contentDescription = "New Folder")
+                }
             }
         }
     }
@@ -500,11 +612,22 @@ fun FileContextMenu(item: FileItem, onDismiss: () -> Unit, onReload: () -> Unit)
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-fun FileGridItem(item: FileItem, onClick: () -> Unit, onLongClick: () -> Unit) {
+fun FileGridItem(
+    item: FileItem,
+    isSelected: Boolean = false,
+    isSelectionMode: Boolean = false,
+    onClick: () -> Unit,
+    onLongClick: () -> Unit
+) {
+    val selectionBorderColor = MaterialTheme.colorScheme.primary
     Column(
         modifier = Modifier
             .padding(4.dp)
             .clip(RoundedCornerShape(12.dp))
+            .then(
+                if (isSelected) Modifier.border(2.dp, selectionBorderColor, RoundedCornerShape(12.dp))
+                else Modifier
+            )
             .combinedClickable(
                 onClick = onClick,
                 onLongClick = onLongClick
@@ -517,7 +640,10 @@ fun FileGridItem(item: FileItem, onClick: () -> Unit, onLongClick: () -> Unit) {
                 .fillMaxWidth()
                 .aspectRatio(1f)
                 .clip(RoundedCornerShape(12.dp))
-                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
+                .background(
+                    if (isSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
+                    else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                ),
             contentAlignment = Alignment.Center
         ) {
             if (item.mimeType.startsWith("image/") || item.mimeType.startsWith("video/")) {
@@ -553,12 +679,33 @@ fun FileGridItem(item: FileItem, onClick: () -> Unit, onLongClick: () -> Unit) {
                     modifier = Modifier.fillMaxSize()
                 )
             }
+            // Selection checkbox overlay
+            if (isSelectionMode || isSelected) {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(4.dp)
+                        .size(22.dp)
+                        .clip(CircleShape)
+                        .background(if (isSelected) MaterialTheme.colorScheme.primary else Color.Black.copy(alpha = 0.35f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    if (isSelected) {
+                        Icon(
+                            Icons.Default.Check,
+                            contentDescription = "Selected",
+                            tint = Color.White,
+                            modifier = Modifier.size(14.dp)
+                        )
+                    }
+                }
+            }
         }
         Spacer(modifier = Modifier.height(4.dp))
         Text(
             text = item.name,
             style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurface,
+            color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
             maxLines = 2,
             overflow = TextOverflow.Ellipsis,
             textAlign = TextAlign.Center
@@ -608,10 +755,22 @@ fun FileTypeIconBadge(
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-fun FileListItem(item: FileItem, onClick: () -> Unit, onLongClick: () -> Unit) {
+fun FileListItem(
+    item: FileItem,
+    isSelected: Boolean = false,
+    isSelectionMode: Boolean = false,
+    onClick: () -> Unit,
+    onLongClick: () -> Unit
+) {
+    val selectionBorderColor = MaterialTheme.colorScheme.primary
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .clip(RoundedCornerShape(8.dp))
+            .then(
+                if (isSelected) Modifier.background(MaterialTheme.colorScheme.primary.copy(alpha = 0.08f))
+                else Modifier
+            )
             .combinedClickable(
                 onClick = onClick,
                 onLongClick = onLongClick
@@ -619,52 +778,77 @@ fun FileListItem(item: FileItem, onClick: () -> Unit, onLongClick: () -> Unit) {
             .padding(horizontal = 8.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Box(
-            modifier = Modifier
-                .size(48.dp)
-                .clip(RoundedCornerShape(10.dp))
-                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
-            contentAlignment = Alignment.Center
-        ) {
-            if (item.mimeType.startsWith("image/") || item.mimeType.startsWith("video/")) {
-                AsyncImage(
-                    model = item.file,
-                    contentDescription = item.name,
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier.fillMaxSize()
-                )
-                if (item.mimeType.startsWith("video/")) {
-                    Surface(
-                        shape = androidx.compose.foundation.shape.CircleShape,
-                        color = Color.Black.copy(alpha = 0.6f),
-                        modifier = Modifier
-                            .align(Alignment.BottomStart)
-                            .padding(2.dp)
-                            .size(16.dp)
-                    ) {
-                        Box(contentAlignment = Alignment.Center) {
-                            Icon(
-                                imageVector = Icons.Default.PlayArrow,
-                                contentDescription = "Video",
-                                tint = Color.White,
-                                modifier = Modifier.size(10.dp)
-                            )
+        // Checkbox or thumbnail
+        if (isSelectionMode) {
+            Box(
+                modifier = Modifier
+                    .size(48.dp)
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(
+                        if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
+                if (isSelected) {
+                    Icon(Icons.Default.Check, contentDescription = "Selected", tint = Color.White, modifier = Modifier.size(28.dp))
+                } else {
+                    FileTypeIconBadge(item = item, iconSize = 28.dp, modifier = Modifier.fillMaxSize())
+                }
+            }
+        } else {
+            Box(
+                modifier = Modifier
+                    .size(48.dp)
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
+                contentAlignment = Alignment.Center
+            ) {
+                if (item.mimeType.startsWith("image/") || item.mimeType.startsWith("video/")) {
+                    AsyncImage(
+                        model = item.file,
+                        contentDescription = item.name,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.fillMaxSize()
+                    )
+                    if (item.mimeType.startsWith("video/")) {
+                        Surface(
+                            shape = androidx.compose.foundation.shape.CircleShape,
+                            color = Color.Black.copy(alpha = 0.6f),
+                            modifier = Modifier
+                                .align(Alignment.BottomStart)
+                                .padding(2.dp)
+                                .size(16.dp)
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(
+                                    imageVector = Icons.Default.PlayArrow,
+                                    contentDescription = "Video",
+                                    tint = Color.White,
+                                    modifier = Modifier.size(10.dp)
+                                )
+                            }
                         }
                     }
+                } else {
+                    FileTypeIconBadge(
+                        item = item,
+                        iconSize = 28.dp,
+                        modifier = Modifier.fillMaxSize()
+                    )
                 }
-            } else {
-                FileTypeIconBadge(
-                    item = item,
-                    iconSize = 28.dp,
-                    modifier = Modifier.fillMaxSize()
-                )
             }
         }
         
         Spacer(modifier = Modifier.width(16.dp))
         
         Column(modifier = Modifier.weight(1f)) {
-            Text(text = item.name, style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(
+                text = item.name,
+                style = MaterialTheme.typography.bodyLarge,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+            )
             
             val df = remember { SimpleDateFormat("MMM dd, yyyy", Locale.getDefault()) }
             val dateStr = df.format(Date(item.lastModified))
