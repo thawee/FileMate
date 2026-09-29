@@ -17,8 +17,8 @@ Whether you need to transfer large files wirelessly across your local network, v
 
 ### 📡 Local Web File Server & Sharing
 - **Zero-Configuration Server:** Instantly host files over local Wi-Fi on customizable HTTP ports.
-- **PIN Authentication & QR Code Pairing:** Auto-generates a secure 4-digit PIN on startup. Scan the dynamic QR code in the app to quickly connect and authenticate.
-- **Dynamic HTTP GZIP Compression:** Transparently compresses text and JSON responses (like file lists) on the fly, dramatically reducing bandwidth usage and increasing UI loading speed.
+- **PIN Authentication & QR Code Pairing:** Auto-generates a secure 4-digit PIN on startup. Scan the dynamic QR code in the app to quickly connect and authenticate, with persistent browser sessions across page reloads.
+- **Robust Local Low-Latency Delivery:** Fast, uncompressed UTF-8 JSON streaming for low-latency operations on local Wi-Fi, fully compatible with reverse proxies, sub-paths, and external HTTP clients.
 - **Zero-Copy File Streaming:** Uses native `FileChannel.transferTo()` with full support for `HTTP 206 Partial Content` Range requests, allowing you to stream large 4K movies or seek through audio files straight from the browser without draining the phone's battery.
 - **Foreground Service & Wakelock:** Runs reliably in the background with a CPU Wakelock to ensure long batch downloads or heavy uploads are never interrupted when the screen turns off.
 - **Real-Time Traffic Monitor:** Tracks live Upload (`Tx`) and Download (`Rx`) speeds.

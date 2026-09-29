@@ -4,6 +4,25 @@ All notable changes to the **File Mate** Android Application and Web Frontend fi
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to Semantic Versioning.
 
+## [2.2.1] - 2026-09-29
+
+### 🛡️ WebUI Stability & Networking Hardening
+- **Authentication Resilience:**
+  - Added session PIN persistence (`sessionStorage`) so browser sessions survive page reloads and back/forward navigation.
+  - Multi-channel backend authentication supporting `X-PIN` request headers, URL `?pin=` parameters, session cookies (`SameSite=Lax`), and HTTP Basic Auth.
+  - Interactive in-page PIN unlock modal when encountering `401 Unauthorized`, replacing generic error screens with instant recovery.
+- **Routing & Proxy Compatibility:**
+  - Stripped absolute scheme/host authority (`http://...`) from request paths when accessed via HTTP proxies.
+  - Suffix matching (`path.endsWith(...)`) for all backend API endpoints, supporting reverse proxies and custom sub-paths.
+  - Isolated SPA fallback router with `if (path.contains("/api/")) notFound()` to strictly prevent API endpoints from leaking HTML templates.
+- **Data Transport & Storage Safety:**
+  - Removed naive manual GZIP compression on JSON API responses to eliminate browser `JSON.parse` decoding failures.
+  - Replaced fragile directory `!folder.canRead()` check with direct `folder.listFiles() == null` check, returning an explicit `403 Permission Denied` instead of false 404s on Android Scoped Storage.
+  - Safe fallback for `sharedRoot` to `Environment.getExternalStorageDirectory()` on service restarts.
+- **Android Networking:**
+  - Enabled `android:usesCleartextTraffic="true"` in AndroidManifest to resolve DLNA/HTTP cleartext network security policy rejections.
+  - Guarded Android 14+ `FOREGROUND_SERVICE_TYPE_SPECIAL_USE` flag to prevent crashes on Android 10-13 devices.
+
 ## [2.2.0] - 2026-09-28
 
 ### 🎨 UI/UX & Functional Improvements

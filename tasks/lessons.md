@@ -33,3 +33,11 @@
 8. **Full-Width Containers for Critical Network Identifiers**:
    - **Pattern**: Placing dynamic network URLs or IP addresses alongside multiple action buttons in a single cramped `Row` with `maxLines = 1` and `TextOverflow.Ellipsis` causes URLs (e.g., `http://10.112.12.215:8080`) to truncate into `http://10.112....` on mobile screens.
    - **Rule**: Always render critical, user-copyable strings (URLs, IPs, tokens) inside dedicated full-width container blocks with `softWrap = true`, keeping auxiliary action buttons (Refresh, Copy) in a header row.
+
+9. **Avoid Naive GZIP on Local Embedded HTTP Servers & Inspect Raw Response in Fetch**:
+   - **Pattern**: Manually applying `GZIPOutputStream` compression on lightweight JSON API responses (`/api/files`, `/api/system`) in custom embedded Java/Android NIO servers causes browser `fetch()` clients to fail with `JSON.parse: unexpected character at line 1 column 1 of the JSON data` when transport headers, framing, or decompression fail. Furthermore, directly invoking `await response.json()` without first reading `response.text()` masks the true response body (e.g. gzip magic bytes or HTML fallback).
+   - **Rule**: Never compress small JSON payloads on local Wi-Fi embedded servers where bandwidth is abundant and compression artifacts break clients. Always use `await response.text()` prior to `JSON.parse()`, logging the first 80 characters of any non-JSON response for immediate root-cause diagnosis.
+
+10. **Strict Isolation of API Routes in Single Page Application (SPA) Fallback**:
+    - **Pattern**: An SPA router fallback returning `index.html` on unmatched routes (to support client-side reload on subpaths) can catch API requests (`/api/files`, `/api/system`) if incoming paths contain absolute URLs (from HTTP proxies), subpath prefixes, or trailing slashes, causing the client `fetch()` to receive `<!DOCTYPE html>` instead of JSON.
+    - **Rule**: Always normalize `HttpRequest.path` by stripping scheme/host prefixes (`http://...`), match API routes using robust suffix matching (`path.endsWith("/api/files")`), and strictly guard the SPA HTML fallback with `if (path.contains("/api/")) notFound()`.

@@ -102,3 +102,17 @@
 - **Validation:**
   - Unit tests: `25 actionable tasks, BUILD SUCCESSFUL`.
   - Debug APK: `assembleDebug BUILD SUCCESSFUL`.
+
+## Phase 8: WebUI Authentication Resilience & Storage Error Diagnostics
+- [x] **1. Backend Authentication & Directory Access Hardening (`FileServerService.kt`)**
+  - [x] 1.1 Support `X-PIN` header and URL `?pin=` parameter across all API endpoints in addition to Basic Auth and Cookies.
+  - [x] 1.2 Remove fragile `!folder.canRead()` directory check; check `folder.listFiles() == null` for explicit 403 permission error.
+  - [x] 1.3 Add safe fallback `sharedRoot ?: Environment.getExternalStorageDirectory()` in `filesResponse` so folder listing never fails on null root.
+- [x] **2. WebUI Auth Header Injection & Storage Persistence (`script.js`)**
+  - [x] 2.1 Store active PIN in `sessionStorage` on QR code scan or manual entry; reuse across page reloads.
+  - [x] 2.2 Inject `Authorization: Basic` and `X-PIN` headers on all outgoing `fetch()` calls.
+  - [x] 2.3 Clear `tbody` loading row on error and display detailed error status with recovery instructions.
+  - [x] 2.4 Add in-page PIN Unlock prompt if API encounters 401 Unauthorized.
+- [x] **3. Verification & Build**
+  - [x] 3.1 Run tests (`./gradlew testDebugUnitTest`).
+  - [x] 3.2 Build APK (`./gradlew assembleDebug`).

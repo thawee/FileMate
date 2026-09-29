@@ -4,6 +4,36 @@ let sortCol = 'name';
 let sortDesc = false;
 let searchQuery = '';
 
+function getActivePin() {
+    return sessionStorage.getItem('filemate_pin') || '';
+}
+
+function setActivePin(pin) {
+    if (pin) {
+        sessionStorage.setItem('filemate_pin', pin);
+    } else {
+        sessionStorage.removeItem('filemate_pin');
+    }
+}
+
+function getAuthHeaders() {
+    const headers = {};
+    const pin = getActivePin();
+    if (pin) {
+        headers['X-PIN'] = pin;
+        headers['Authorization'] = 'Basic ' + btoa('admin:' + pin);
+    }
+    return headers;
+}
+
+function authenticatedFetch(url, options = {}) {
+    const headers = Object.assign({}, getAuthHeaders(), options.headers || {});
+    return fetch(url, Object.assign({}, options, {
+        headers,
+        credentials: 'same-origin'
+    }));
+}
+
 function getFileTypeSvg(file, isGrid) {
     const size = isGrid ? 52 : 20;
     const isDir = file.isDirectory;
@@ -403,7 +433,7 @@ async function openPreview(fileName, fileUrl) {
         exifDate.textContent = '...';
         
         // Fetch EXIF data
-        fetch('/api/exif?path=' + encodeURIComponent(currentPath === '/' ? '/' + fileName : currentPath + '/' + fileName))
+        authenticatedFetch('/api/exif?path=' + encodeURIComponent(currentPath === '/' ? '/' + fileName : currentPath + '/' + fileName))
             .then(res => res.json())
             .then(data => {
                 if (data.status === 'ok' && (data.datetime || data.location)) {
@@ -477,7 +507,7 @@ async function openPreview(fileName, fileUrl) {
         } else if (isTextCode) {
             body.innerHTML = '<div style="padding: 2rem; color: var(--text-muted);">Loading content...</div>';
             try {
-                const resp = await fetch(fileUrl);
+                const resp = await authenticatedFetch(fileUrl);
                 if (!resp.ok) throw new Error('Failed to load file');
                 const text = await resp.text();
 
@@ -601,7 +631,7 @@ async function quickDeleteCurrentImage() {
     if (!confirm(`Delete "${fileName}" and advance to next image?`)) return;
 
     try {
-        const response = await fetch(`/api/delete?name=${encodeURIComponent(fileName)}&path=${encodeURIComponent(currentPath)}`, {
+        const response = await authenticatedFetch(`/api/delete?name=${encodeURIComponent(fileName)}&path=${encodeURIComponent(currentPath)}`, {
             method: 'POST'
         });
 
@@ -718,7 +748,7 @@ async function deleteItem(fileName) {
     }
 
     try {
-        const response = await fetch(`/api/delete?name=${encodeURIComponent(fileName)}&path=${encodeURIComponent(currentPath)}`, {
+        const response = await authenticatedFetch(`/api/delete?name=${encodeURIComponent(fileName)}&path=${encodeURIComponent(currentPath)}`, {
             method: 'POST'
         });
         if (!response.ok) throw new Error('Failed to delete item');
@@ -779,7 +809,7 @@ async function loadMoveFolders() {
     }
 
     try {
-        const response = await fetch('/api/files?path=' + encodeURIComponent(moveTargetPath));
+        const response = await authenticatedFetch('/api/files?path=' + encodeURIComponent(moveTargetPath));
         if (!response.ok) throw new Error('Failed to load folders');
         const files = await response.json();
 
@@ -833,7 +863,7 @@ async function confirmMove() {
     if (movingFileNames.length === 0) return;
 
     try {
-        const response = await fetch(`/api/move?${nameParams(movingFileNames)}&fromPath=${encodeURIComponent(movingFromPath)}&targetPath=${encodeURIComponent(moveTargetPath)}`, {
+        const response = await authenticatedFetch(`/api/move?${nameParams(movingFileNames)}&fromPath=${encodeURIComponent(movingFromPath)}&targetPath=${encodeURIComponent(moveTargetPath)}`, {
             method: 'POST'
         });
 
@@ -890,7 +920,7 @@ async function confirmRename() {
         return;
     }
     try {
-        const resp = await fetch(`/api/rename?path=${encodeURIComponent(currentPath)}&oldName=${encodeURIComponent(renamingTargetName)}&newName=${encodeURIComponent(newName)}`);
+        const resp = await authenticatedFetch(`/api/rename?path=${encodeURIComponent(currentPath)}&oldName=${encodeURIComponent(renamingTargetName)}&newName=${encodeURIComponent(newName)}`);
         if (!resp.ok) {
             const err = await resp.text();
             throw new Error(err || 'Failed to rename');
@@ -906,7 +936,7 @@ async function confirmRename() {
 async function unzipFile(fileName) {
     try {
         showToast(`Extracting ${fileName}...`, 'info');
-        const resp = await fetch(`/api/unzip?path=${encodeURIComponent(currentPath)}&name=${encodeURIComponent(fileName)}`, { method: 'POST' });
+        const resp = await authenticatedFetch(`/api/unzip?path=${encodeURIComponent(currentPath)}&name=${encodeURIComponent(fileName)}`, { method: 'POST' });
         if (!resp.ok) {
             const error = await resp.json();
             throw new Error(error.error || 'Failed to unzip');
@@ -1079,7 +1109,7 @@ async function batchDeleteSelected() {
     }
 
     try {
-        const response = await fetch(`/api/delete?${nameParams(selected.map(f => f.name))}&path=${encodeURIComponent(currentPath)}`, {
+        const response = await authenticatedFetch(`/api/delete?${nameParams(selected.map(f => f.name))}&path=${encodeURIComponent(currentPath)}`, {
             method: 'POST'
         });
         if (!response.ok) throw new Error('Failed to delete items');
@@ -1138,7 +1168,7 @@ async function createFolder() {
     }
 
     try {
-        const response = await fetch(`/api/mkdir?name=${encodeURIComponent(folderName)}&path=${encodeURIComponent(currentPath)}`, {
+        const response = await authenticatedFetch(`/api/mkdir?name=${encodeURIComponent(folderName)}&path=${encodeURIComponent(currentPath)}`, {
             method: 'POST'
         });
 
@@ -1236,8 +1266,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     const urlParams = new URLSearchParams(window.location.search);
     const pinParam = urlParams.get('pin');
     if (pinParam) {
+        setActivePin(pinParam);
         try {
-            const authResp = await fetch('/api/auth?pin=' + encodeURIComponent(pinParam));
+            const authResp = await fetch('/api/auth?pin=' + encodeURIComponent(pinParam), { credentials: 'same-origin' });
             if (authResp.ok) {
                 showToast('Authenticated via QR Code', 'success', 2500);
             }
@@ -1312,29 +1343,121 @@ document.addEventListener('DOMContentLoaded', async () => {
 let showHiddenFiles = false;
 
 async function fetchFiles() {
+    const tbody = document.getElementById('fileListBody');
+    const emptyState = document.getElementById('emptyState');
     try {
-        const tbody = document.getElementById('fileListBody');
         tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding: 2rem;">Loading files...</td></tr>';
+        emptyState.style.display = 'none';
 
-        const response = await fetch(`/api/files?path=${encodeURIComponent(currentPath)}&showHidden=${showHiddenFiles}`);
-        if (!response.ok) throw new Error('Failed to fetch files');
-        const files = await response.json();
+        const pinQuery = getActivePin() ? `&pin=${encodeURIComponent(getActivePin())}` : '';
+        const response = await authenticatedFetch(`/api/files?path=${encodeURIComponent(currentPath)}&showHidden=${showHiddenFiles}${pinQuery}`);
+        
+        if (!response.ok) {
+            let errorDetail = `HTTP ${response.status} (${response.statusText || 'Error'})`;
+            try {
+                const errData = await response.json();
+                if (errData.error || errData.message) {
+                    errorDetail = errData.message || errData.error;
+                }
+            } catch (_) {
+                try {
+                    const text = await response.text();
+                    if (text) errorDetail = text;
+                } catch (_) {}
+            }
+            const err = new Error(errorDetail);
+            err.status = response.status;
+            throw err;
+        }
+
+        const rawText = await response.text();
+        let files;
+        try {
+            files = JSON.parse(rawText);
+        } catch (jsonErr) {
+            console.error("Non-JSON response from /api/files:", rawText);
+            const preview = rawText.length > 80 ? rawText.substring(0, 80) + '...' : rawText;
+            throw new Error(`Invalid server response (${preview || 'empty'}): ${jsonErr.message}`);
+        }
         currentFiles = files;
         updateSortIndicators();
         filterAndRenderFiles();
         updateBreadcrumb();
     } catch (error) {
         console.error('Error fetching files:', error);
-        document.getElementById('emptyState').style.display = 'block';
-        document.getElementById('emptyState').innerHTML = '<p>Error loading files.</p>';
+        tbody.innerHTML = '';
+        emptyState.style.display = 'block';
+
+        if (error.status === 401) {
+            emptyState.innerHTML = `
+                <div style="max-width: 360px; margin: 2rem auto; text-align: center; padding: 2rem; background: var(--card-bg, rgba(30, 27, 75, 0.4)); border: 1px solid var(--panel-border); border-radius: 12px;">
+                    <div style="font-size: 2.5rem; margin-bottom: 0.75rem;">🔒</div>
+                    <h3 style="margin-bottom: 0.5rem; color: var(--text-color);">PIN Required</h3>
+                    <p style="color: var(--text-muted); font-size: 0.88rem; margin-bottom: 1.25rem;">Enter the 4-digit PIN displayed on your Android FileMate app screen.</p>
+                    <div style="display: flex; gap: 0.5rem; justify-content: center; margin-bottom: 0.75rem;">
+                        <input type="password" id="manualPinInput" maxlength="8" placeholder="••••" style="width: 140px; text-align: center; font-size: 1.25rem; letter-spacing: 4px; padding: 0.5rem; border-radius: 8px; border: 1px solid var(--panel-border); background: var(--bg-color, #0f172a); color: var(--text-color, #fff);" onkeydown="if(event.key==='Enter')submitManualPin()" autofocus />
+                        <button class="btn primary-btn" onclick="submitManualPin()" style="padding: 0.5rem 1.25rem;">Unlock</button>
+                    </div>
+                    <div id="pinErrorMsg" style="color: #ef4444; font-size: 0.82rem; min-height: 1.2rem;"></div>
+                </div>
+            `;
+            setTimeout(() => {
+                const input = document.getElementById('manualPinInput');
+                if (input) input.focus();
+            }, 50);
+        } else {
+            emptyState.innerHTML = `
+                <div style="padding: 2rem; text-align: center;">
+                    <div style="font-size: 2rem; margin-bottom: 0.5rem;">⚠️</div>
+                    <p style="color: #ef4444; font-weight: 600; margin-bottom: 0.5rem;">${escapeHtml(error.message || 'Error loading files')}</p>
+                    <p style="color: var(--text-muted); font-size: 0.85rem; margin-bottom: 1rem;">Please check server status and storage permissions on your Android device.</p>
+                    <button class="btn secondary-btn" onclick="fetchFiles()">↻ Retry</button>
+                </div>
+            `;
+        }
+    }
+}
+
+async function submitManualPin() {
+    const input = document.getElementById('manualPinInput');
+    const errMsg = document.getElementById('pinErrorMsg');
+    if (!input) return;
+    const pin = input.value.trim();
+    if (!pin) {
+        if (errMsg) errMsg.textContent = 'Please enter PIN';
+        return;
+    }
+    if (errMsg) errMsg.textContent = 'Verifying...';
+    try {
+        const resp = await fetch('/api/auth?pin=' + encodeURIComponent(pin), { credentials: 'same-origin' });
+        if (resp.ok) {
+            setActivePin(pin);
+            showToast('Authenticated successfully', 'success', 2500);
+            fetchSystemInfo();
+            fetchFiles();
+        } else {
+            if (errMsg) errMsg.textContent = 'Incorrect PIN. Check the Android screen.';
+            input.value = '';
+            input.focus();
+        }
+    } catch (e) {
+        if (errMsg) errMsg.textContent = 'Connection error. Is server running?';
     }
 }
 
 async function fetchSystemInfo() {
     try {
-        const response = await fetch('/api/system');
+        const pinQuery = getActivePin() ? `?pin=${encodeURIComponent(getActivePin())}` : '';
+        const response = await authenticatedFetch('/api/system' + pinQuery);
         if (!response.ok) throw new Error('Failed to fetch system info');
-        const info = await response.json();
+        const rawText = await response.text();
+        let info;
+        try {
+            info = JSON.parse(rawText);
+        } catch (jsonErr) {
+            console.error('Non-JSON response from /api/system:', rawText);
+            return;
+        }
 
         const systemInfoElement = document.getElementById('systemInfo');
         

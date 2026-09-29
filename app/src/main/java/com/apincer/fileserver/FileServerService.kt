@@ -64,6 +64,7 @@ class FileServerService : Service() {
     private var cachedHtml: ByteArray = ByteArray(0)
     private var cachedCss: ByteArray = ByteArray(0)
     private var cachedJs: ByteArray = ByteArray(0)
+    private var cachedMarkedJs: ByteArray = ByteArray(0)
     private var wakeLock: android.os.PowerManager.WakeLock? = null
     private var serverStartTime: Long = 0L
 
@@ -88,6 +89,8 @@ class FileServerService : Service() {
         val uriString = intent?.getStringExtra("FOLDER_URI")
         if (uriString != null) {
             sharedRoot = Uri.parse(uriString).path?.let { File(it) }
+        } else if (sharedRoot == null) {
+            sharedRoot = android.os.Environment.getExternalStorageDirectory()
         }
 
         TrafficMonitor.reset()
@@ -103,6 +106,7 @@ class FileServerService : Service() {
             cachedHtml = assets.open("index.html").readBytes()
             cachedCss = assets.open("style.css").readBytes()
             cachedJs = assets.open("script.js").readBytes()
+            cachedMarkedJs = assets.open("marked.min.js").readBytes()
         } catch (e: Exception) {
             Log.e("FileServerService", "Failed to load assets", e)
         }
@@ -139,7 +143,7 @@ class FileServerService : Service() {
             .setOngoing(true)
             .build()
         try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            if (Build.VERSION.SDK_INT >= 34) {
                 startForeground(
                     1,
                     notification,
@@ -184,25 +188,34 @@ class FileServerService : Service() {
     }
 
     private fun handleRoute(request: NioHttpServer.HttpRequest): NioHttpServer.HttpResponse {
-        val rawPath = request.path ?: "/"
+        var rawPath = request.path ?: "/"
+        if (rawPath.startsWith("http://") || rawPath.startsWith("https://")) {
+            val schemeEnd = rawPath.indexOf("://")
+            val pathStart = rawPath.indexOf('/', schemeEnd + 3)
+            rawPath = if (pathStart >= 0) rawPath.substring(pathStart) else "/"
+        }
         val queryIdx = rawPath.indexOf('?')
         val path = if (queryIdx >= 0) rawPath.substring(0, queryIdx) else rawPath
         val query = if (queryIdx >= 0) rawPath.substring(queryIdx + 1) else ""
 
-        val isPublicAsset = path == "/" || path == "/style.css" || path == "/script.js" || path.startsWith("/api/auth")
+        val isPublicAsset = path.endsWith("/style.css") || path.endsWith("/script.js") || path.endsWith("/marked.min.js") || path.contains("/api/auth")
+        val authHeader = request.getHeader("authorization", "")
+        val cookie = request.getHeader("cookie", "")
+        val xPinHeader = request.getHeader("x-pin", "")
+        val currentPin = AuthHelper.currentPin.value
+        val expectedAuth = "Basic " + android.util.Base64.encodeToString("admin:$currentPin".toByteArray(), android.util.Base64.NO_WRAP)
+
+        var isAuthenticated = isPublicAsset
         if (!isPublicAsset) {
-            val authHeader = request.getHeader("authorization", "")
-            val cookie = request.getHeader("cookie", "")
-            val expectedAuth = "Basic " + android.util.Base64.encodeToString("admin:${AuthHelper.currentPin.value}".toByteArray(), android.util.Base64.NO_WRAP)
-            
-            var isAuthenticated = authHeader == expectedAuth
-            if (!isAuthenticated && cookie.contains("pin=${AuthHelper.currentPin.value}")) {
+            if (authHeader == expectedAuth) {
                 isAuthenticated = true
-            }
-            
-            if (!isAuthenticated) {
+            } else if (cookie.contains("pin=$currentPin") || (xPinHeader.isNotEmpty() && xPinHeader == currentPin)) {
+                isAuthenticated = true
+            } else {
                 val pinQuery = parseQueryParam(query, "pin")
-                if (pinQuery == AuthHelper.currentPin.value) isAuthenticated = true
+                if (pinQuery == currentPin) {
+                    isAuthenticated = true
+                }
             }
 
             if (!isAuthenticated) {
@@ -210,54 +223,52 @@ class FileServerService : Service() {
                     .setStatus(401, "Unauthorized")
                     .addHeader("WWW-Authenticate", "Basic realm=\"FileServer\"")
                     .addHeader("Content-Type", "application/json")
-                    .setBody("{\"error\":\"Unauthorized\"}".toByteArray())
+                    .setBody("{\"error\":\"Unauthorized\",\"message\":\"Authentication required. Please provide valid PIN.\"}".toByteArray())
             }
         }
 
-        val response = when (path) {
-            "/" -> htmlResponse(cachedHtml)
-            "/style.css" -> cssResponse(cachedCss)
-            "/script.js" -> jsResponse(cachedJs)
-            "/api/auth" -> authResponse(query)
-            "/api/health" -> jsonResponse("{\"status\":\"ok\"}")
-            "/api/system" -> jsonResponse(buildSystemJson())
-            "/api/files" -> filesResponse(query)
-            "/api/upload" -> uploadResponse(request, query)
-            "/api/delete" -> deleteResponse(request, query)
-            "/api/move" -> moveResponse(query)
-            "/api/rename" -> renameResponse(query)
-            "/api/mkdir" -> mkdirResponse(query)
+        val response = when {
+            path == "/" || path.endsWith("/index.html") -> {
+                val res = htmlResponse(cachedHtml)
+                if (isAuthenticated && !isPublicAsset && !cookie.contains("pin=$currentPin")) {
+                    res.addHeader("Set-Cookie", "pin=$currentPin; Path=/; SameSite=Lax")
+                }
+                res
+            }
+            path.endsWith("/style.css") -> cssResponse(cachedCss)
+            path.endsWith("/script.js") -> jsResponse(cachedJs)
+            path.endsWith("/marked.min.js") -> jsResponse(cachedMarkedJs)
+            path.endsWith("/api/auth") -> authResponse(query)
+            path.endsWith("/api/health") -> jsonResponse("{\"status\":\"ok\"}")
+            path.endsWith("/api/system") -> jsonResponse(buildSystemJson())
+            path.endsWith("/api/files") -> filesResponse(query)
+            path.endsWith("/api/upload") -> uploadResponse(request, query)
+            path.endsWith("/api/delete") -> deleteResponse(request, query)
+            path.endsWith("/api/move") -> moveResponse(query)
+            path.endsWith("/api/rename") -> renameResponse(query)
+            path.endsWith("/api/mkdir") -> mkdirResponse(query)
 
-            "/api/thumbnail" -> thumbnailResponse(query)
-            "/api/download-zip" -> downloadZipResponse(query)
-            "/api/unzip" -> unzipResponse(request, query)
-            "/api/search" -> searchResponse(query)
-            "/api/exif" -> exifResponse(query)
-            "/api/qr" -> qrResponse(query, request)
+            path.endsWith("/api/thumbnail") -> thumbnailResponse(query)
+            path.endsWith("/api/download-zip") -> downloadZipResponse(query)
+            path.endsWith("/api/unzip") -> unzipResponse(request, query)
+            path.endsWith("/api/search") -> searchResponse(query)
+            path.endsWith("/api/exif") -> exifResponse(query)
+            path.endsWith("/api/qr") -> qrResponse(query, request)
             else -> {
-                if (path.startsWith("/api/download/")) {
+                if (path.contains("/api/download/")) {
                     downloadResponse(request, path, query)
-                } else {
+                } else if (path.contains("/api/")) {
                     notFound()
+                } else {
+                    val res = htmlResponse(cachedHtml)
+                    if (isAuthenticated && !isPublicAsset && !cookie.contains("pin=$currentPin")) {
+                        res.addHeader("Set-Cookie", "pin=$currentPin; Path=/; SameSite=Lax")
+                    }
+                    res
                 }
             }
         }
 
-        val contentType = response.getHeader("Content-Type") ?: ""
-        val acceptEncoding = request.getHeader("accept-encoding", "")
-        if (acceptEncoding.contains("gzip") && 
-            (contentType.contains("text/") || contentType.contains("application/json") || contentType.contains("application/javascript"))) {
-            
-            val body = response.body
-            if (body.isNotEmpty()) {
-                val bos = java.io.ByteArrayOutputStream()
-                java.util.zip.GZIPOutputStream(bos).use { it.write(body) }
-                val gzippedBody = bos.toByteArray()
-                response.setBody(gzippedBody)
-                response.addHeader("Content-Encoding", "gzip")
-            }
-        }
-        
         return response
     }
 
@@ -312,20 +323,24 @@ class FileServerService : Service() {
     }
 
     private fun filesResponse(query: String): NioHttpServer.HttpResponse {
-        val root = sharedRoot
-        if (root == null || !root.exists()) {
-            return errorResponse(400, "No shared folder selected")
+        val root = sharedRoot ?: android.os.Environment.getExternalStorageDirectory()
+        if (!root.exists()) {
+            return errorResponse(400, "Shared storage directory not found or unmounted")
         }
 
         val path = parseQueryParam(query, "path")
         val folder = resolveFile(root, path)
-        if (folder == null || !folder.canRead() || !folder.isDirectory) {
-            return errorResponse(404, "Folder not found")
+        if (folder == null || !folder.exists() || !folder.isDirectory) {
+            return errorResponse(404, "Folder not found: $path")
+        }
+
+        val entries = folder.listFiles()
+        if (entries == null) {
+            return errorResponse(403, "Cannot read folder: check All Files Access permission on Android")
         }
 
         val showHidden = parseQueryParam(query, "showHidden") == "true"
 
-        val entries = folder.listFiles() ?: emptyArray()
         val sb = StringBuilder("[")
         var first = true
         entries.asSequence()
@@ -664,8 +679,8 @@ class FileServerService : Service() {
     private fun authResponse(query: String): NioHttpServer.HttpResponse {
         val pin = parseQueryParam(query, "pin")
         if (AuthHelper.verifyPin(pin)) {
-            val response = jsonResponse("{\"status\":\"ok\"}")
-            response.addHeader("Set-Cookie", "pin=$pin; Path=/; HttpOnly")
+            val response = jsonResponse("{\"status\":\"ok\",\"authenticated\":true}")
+            response.addHeader("Set-Cookie", "pin=$pin; Path=/; SameSite=Lax")
             return response
         }
         return errorResponse(401, "Invalid PIN")
