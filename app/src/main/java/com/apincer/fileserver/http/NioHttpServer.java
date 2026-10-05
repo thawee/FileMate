@@ -505,6 +505,26 @@ public class NioHttpServer implements Runnable {
         }
     }
 
+    public static String[] splitRequestTarget(String target) {
+        if (target == null) throw new IllegalArgumentException("Missing request target");
+        java.net.URI uri = java.net.URI.create(target);
+        String scheme = uri.getScheme();
+        if (uri.getRawFragment() != null ||
+                (scheme != null && (!scheme.equalsIgnoreCase("http") && !scheme.equalsIgnoreCase("https"))) ||
+                (scheme != null && uri.getRawAuthority() == null) ||
+                (scheme == null && !target.startsWith("/"))) {
+            throw new IllegalArgumentException("Invalid request target");
+        }
+        String path = uri.getRawPath();
+        return new String[]{path == null || path.isEmpty() ? "/" : path, uri.getRawQuery() == null ? "" : uri.getRawQuery()};
+    }
+
+    private Runnable onReady;
+
+    public void setOnReady(Runnable onReady) {
+        this.onReady = onReady;
+    }
+
     @Override
     public void run() {
         isRunning = true;
@@ -545,6 +565,7 @@ public class NioHttpServer implements Runnable {
                 serverSocketChannel.bind(new InetSocketAddress(port), socketBacklog);
                 serverSocketChannel.configureBlocking(false);
                 serverSocketChannel.register(selector, SelectionKey.OP_ACCEPT);
+                if (onReady != null) onReady.run();
 
                 // System.out.println("Multi-threaded NIO Server started on port: " + port);
                 lastTimeoutCheck = System.currentTimeMillis();
@@ -804,13 +825,33 @@ public class NioHttpServer implements Runnable {
                 HttpRequest request = requestPool.acquire();
                 request.parse(requestBytes, headerEnd, ((InetSocketAddress) clientChannel.getRemoteAddress()).getAddress().getHostAddress());
 
-                // Validate content length
-                int contentLength = Integer.parseInt(request.getHeader("content-length", "0"));
-                if (contentLength > maxRequestSize) {
+                String requestPath = null;
+                boolean invalidTarget = false;
+                try { requestPath = splitRequestTarget(request.getPath())[0]; }
+                catch (IllegalArgumentException invalid) { invalidTarget = true; }
+                boolean guest = requestPath != null && (requestPath.equals("/share") || requestPath.startsWith("/share/"));
+                String lengthHeader = request.getHeader("content-length", "");
+                int contentLength = 0;
+                int errorStatus = invalidTarget ? HTTP_BAD_REQUEST : 0;
+                if (!request.getHeader("transfer-encoding", "").isEmpty()) {
+                    errorStatus = HTTP_BAD_REQUEST;
+                } else if (guest && "POST".equals(request.getMethod()) && lengthHeader.isEmpty()) {
+                    errorStatus = 411;
+                } else if (!lengthHeader.isEmpty()) {
+                    try {
+                        if (!lengthHeader.matches("[0-9]+")) throw new NumberFormatException();
+                        long length = Long.parseLong(lengthHeader);
+                        int limit = guest ? 20 * 1024 * 1024 : maxRequestSize;
+                        if (length > limit) errorStatus = HTTP_PAYLOAD_TOO_LARGE;
+                        else contentLength = (int) length;
+                    } catch (NumberFormatException invalid) { errorStatus = HTTP_BAD_REQUEST; }
+                }
+                if (errorStatus != 0) {
+                    attachment.request = request;
                     attachment.response = new HttpResponse()
-                            .setStatus(HTTP_PAYLOAD_TOO_LARGE, "Payload Too Large")
+                            .setStatus(errorStatus, "Invalid request body")
                             .addHeader("Connection", "close")
-                            .setBody("Content-Length exceeds limit".getBytes());
+                            .setBody("Invalid or oversized Content-Length".getBytes(StandardCharsets.UTF_8));
                     key.interestOps(SelectionKey.OP_WRITE);
                     return;
                 }

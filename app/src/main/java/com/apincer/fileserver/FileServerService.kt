@@ -18,6 +18,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import java.io.File
+import com.apincer.fileserver.sharing.*
 
 fun parseBatchNames(query: String): List<String> {
     val individual = query.split('&').mapNotNull { part ->
@@ -54,16 +55,26 @@ class FileServerService : Service() {
         var sharedRoot: File? = null
             private set
 
+        val shares = ShareSessionStore()
+        private val _sharesRevision = MutableStateFlow(0)
+        val sharesRevision: StateFlow<Int> = _sharesRevision.asStateFlow()
+        fun sharesChanged() { _sharesRevision.value += 1 }
+
         private const val SERVER_PORT = 8080
         private const val PROXY_PORT = 8081
     }
 
+    @Volatile
     private var nioServer: NioHttpServer? = null
     private var proxyServer: HttpProxyServer? = null
 
     private var cachedHtml: ByteArray = ByteArray(0)
     private var cachedCss: ByteArray = ByteArray(0)
     private var cachedJs: ByteArray = ByteArray(0)
+    private val shareRoutes by lazy { ShareRoutes(shares, { assets.open(it).use { stream -> stream.readBytes() } },
+        { file, request -> nioServer!!.createFileResponse(file, request) }, ::sharesChanged,
+        { file -> android.media.MediaScannerConnection.scanFile(this, arrayOf(file.absolutePath), null, null) }) }
+
     private var cachedMarkedJs: ByteArray = ByteArray(0)
     private var wakeLock: android.os.PowerManager.WakeLock? = null
     private var serverStartTime: Long = 0L
@@ -72,6 +83,8 @@ class FileServerService : Service() {
         if (intent?.action == "STOP") {
             isRunning = false
             sharedRoot = null
+            shares.clear()
+            sharesChanged()
             stopSelf()
             return START_NOT_STICKY
         }
@@ -79,7 +92,9 @@ class FileServerService : Service() {
         // Promote to foreground first so the Android 14+ FGS timeout never fires.
         startForegroundServiceNotification()
 
-        isRunning = true
+        if (nioServer != null) return START_STICKY
+        shares.reset()
+        sharesChanged()
         serverStartTime = System.currentTimeMillis()
         AuthHelper.generateNewPin()
 
@@ -117,7 +132,7 @@ class FileServerService : Service() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
                 channelId,
-                "File Mate",
+                "ShareMate",
                 NotificationManager.IMPORTANCE_LOW
             )
             val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
@@ -135,7 +150,7 @@ class FileServerService : Service() {
             this, 0, openAppIntent, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
         val notification: Notification = NotificationCompat.Builder(this, channelId)
-            .setContentTitle("File Mate Running")
+            .setContentTitle("ShareMate running")
             .setContentText("Serving files on local network")
             .setSmallIcon(android.R.drawable.ic_dialog_info)
             .setContentIntent(pendingOpenAppIntent)
@@ -168,6 +183,7 @@ class FileServerService : Service() {
             server.setMaxConnections(50)
             server.setTcpNoDelay(true)
             server.setMaxRequestSize(500 * 1024 * 1024) // 500MB upload limit
+            server.setOnReady { if (nioServer === server && server.isRunning) isRunning = true }
 
             server.registerHttpHandler(NioHttpServer.Handler { request ->
                 handleRoute(request)
@@ -188,74 +204,56 @@ class FileServerService : Service() {
     }
 
     private fun handleRoute(request: NioHttpServer.HttpRequest): NioHttpServer.HttpResponse {
-        var rawPath = request.path ?: "/"
-        if (rawPath.startsWith("http://") || rawPath.startsWith("https://")) {
-            val schemeEnd = rawPath.indexOf("://")
-            val pathStart = rawPath.indexOf('/', schemeEnd + 3)
-            rawPath = if (pathStart >= 0) rawPath.substring(pathStart) else "/"
-        }
-        val queryIdx = rawPath.indexOf('?')
-        val path = if (queryIdx >= 0) rawPath.substring(0, queryIdx) else rawPath
-        val query = if (queryIdx >= 0) rawPath.substring(queryIdx + 1) else ""
+        val target = try { NioHttpServer.splitRequestTarget(request.path ?: "/") }
+        catch (_: IllegalArgumentException) { return errorResponse(400, "Invalid request target") }
+        val path = target[0]
+        val query = target[1]
 
-        val isPublicAsset = path.endsWith("/style.css") || path.endsWith("/script.js") || path.endsWith("/marked.min.js") || path.contains("/api/auth")
-        val authHeader = request.getHeader("authorization", "")
+        if (path == "/share" || path.startsWith("/share/")) return shareRoutes.guest(request, path, query)
+        val isPublicAsset = OwnerRoutePolicy.isPublic(path)
         val cookie = request.getHeader("cookie", "")
-        val xPinHeader = request.getHeader("x-pin", "")
         val currentPin = AuthHelper.currentPin.value
-        val expectedAuth = "Basic " + android.util.Base64.encodeToString("admin:$currentPin".toByteArray(), android.util.Base64.NO_WRAP)
-
-        var isAuthenticated = isPublicAsset
-        if (!isPublicAsset) {
-            if (authHeader == expectedAuth) {
-                isAuthenticated = true
-            } else if (cookie.contains("pin=$currentPin") || (xPinHeader.isNotEmpty() && xPinHeader == currentPin)) {
-                isAuthenticated = true
-            } else {
-                val pinQuery = parseQueryParam(query, "pin")
-                if (pinQuery == currentPin) {
-                    isAuthenticated = true
-                }
-            }
-
-            if (!isAuthenticated) {
-                return NioHttpServer.HttpResponse()
-                    .setStatus(401, "Unauthorized")
-                    .addHeader("WWW-Authenticate", "Basic realm=\"FileServer\"")
-                    .addHeader("Content-Type", "application/json")
-                    .setBody("{\"error\":\"Unauthorized\",\"message\":\"Authentication required. Please provide valid PIN.\"}".toByteArray())
-            }
+        val isAuthenticated = try { isPublicAsset || OwnerRoutePolicy.authenticated(request, query, currentPin) }
+        catch (_: IllegalArgumentException) { return errorResponse(400, "Invalid query") }
+        if (!isAuthenticated) {
+            return NioHttpServer.HttpResponse().setStatus(401, "Unauthorized")
+                .addHeader("WWW-Authenticate", "Basic realm=\"ShareMate\"")
+                .addHeader("Content-Type", "application/json")
+                .setBody("{\"error\":\"Authentication required\"}".toByteArray())
+        }
+        if (path == "/api/shares" || path.startsWith("/api/shares/")) {
+            return shareRoutes.owner(request, path, sharedRoot ?: android.os.Environment.getExternalStorageDirectory())
         }
 
         val response = when {
-            path == "/" || path.endsWith("/index.html") -> {
+            path == "/" || path == "/index.html" -> {
                 val res = htmlResponse(cachedHtml)
                 if (isAuthenticated && !isPublicAsset && !cookie.contains("pin=$currentPin")) {
                     res.addHeader("Set-Cookie", "pin=$currentPin; Path=/; SameSite=Lax")
                 }
                 res
             }
-            path.endsWith("/style.css") -> cssResponse(cachedCss)
-            path.endsWith("/script.js") -> jsResponse(cachedJs)
-            path.endsWith("/marked.min.js") -> jsResponse(cachedMarkedJs)
-            path.endsWith("/api/auth") -> authResponse(query)
-            path.endsWith("/api/health") -> jsonResponse("{\"status\":\"ok\"}")
-            path.endsWith("/api/system") -> jsonResponse(buildSystemJson())
-            path.endsWith("/api/files") -> filesResponse(query)
-            path.endsWith("/api/upload") -> uploadResponse(request, query)
-            path.endsWith("/api/delete") -> deleteResponse(request, query)
-            path.endsWith("/api/move") -> moveResponse(query)
-            path.endsWith("/api/rename") -> renameResponse(query)
-            path.endsWith("/api/mkdir") -> mkdirResponse(query)
+            path == "/style.css" -> cssResponse(cachedCss)
+            path == "/script.js" -> jsResponse(cachedJs)
+            path == "/marked.min.js" -> jsResponse(cachedMarkedJs)
+            path == "/api/auth" -> authResponse(query)
+            path == "/api/health" -> jsonResponse("{\"status\":\"ok\"}")
+            path == "/api/system" -> jsonResponse(buildSystemJson())
+            path == "/api/files" -> filesResponse(query)
+            path == "/api/upload" -> uploadResponse(request, query)
+            path == "/api/delete" -> deleteResponse(request, query)
+            path == "/api/move" -> moveResponse(query)
+            path == "/api/rename" -> renameResponse(query)
+            path == "/api/mkdir" -> mkdirResponse(query)
 
-            path.endsWith("/api/thumbnail") -> thumbnailResponse(query)
-            path.endsWith("/api/download-zip") -> downloadZipResponse(query)
-            path.endsWith("/api/unzip") -> unzipResponse(request, query)
-            path.endsWith("/api/search") -> searchResponse(query)
-            path.endsWith("/api/exif") -> exifResponse(query)
-            path.endsWith("/api/qr") -> qrResponse(query, request)
+            path == "/api/thumbnail" -> thumbnailResponse(query)
+            path == "/api/download-zip" -> downloadZipResponse(query)
+            path == "/api/unzip" -> unzipResponse(request, query)
+            path == "/api/search" -> searchResponse(query)
+            path == "/api/exif" -> exifResponse(query)
+            path == "/api/qr" -> qrResponse(query, request)
             else -> {
-                if (path.contains("/api/download/")) {
+                if (path.startsWith("/api/download/")) {
                     downloadResponse(request, path, query)
                 } else if (path.contains("/api/")) {
                     notFound()
@@ -991,6 +989,9 @@ class FileServerService : Service() {
     override fun onDestroy() {
         super.onDestroy()
         isRunning = false
+        shares.clear()
+        sharesChanged()
+        sharedRoot = null
         nioServer?.stop()
         nioServer = null
         proxyServer?.stop()
