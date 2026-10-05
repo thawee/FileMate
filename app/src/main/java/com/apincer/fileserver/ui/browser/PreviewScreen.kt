@@ -81,11 +81,18 @@ fun PreviewScreen(
         initialPage = initialIndex,
         pageCount = { mediaFiles.size }
     )
-    LaunchedEffect(pagerState.settledPage, activeCaster) {
+    val serverRunning by com.apincer.fileserver.FileServerService.isRunningFlow.collectAsState()
+    LaunchedEffect(pagerState.settledPage, activeCaster, serverRunning) {
         activeCaster?.let { caster ->
             val currentItem = mediaFiles.getOrNull(pagerState.settledPage) ?: return@LaunchedEffect
             val primaryIp = com.apincer.fileserver.getLocalIpAddresses().firstOrNull() ?: "127.0.0.1"
-            val imageUrl = "http://$primaryIp:8080/files/${currentItem.path}"
+            val imageUrl = if (caster is com.apincer.fileserver.cast.DlnaCaster) {
+                withContext(Dispatchers.IO) { com.apincer.fileserver.sharing.photoShareUrl(currentItem.file, primaryIp) }
+            } else Uri.fromFile(currentItem.file).toString()
+            if (imageUrl == null) {
+                Toast.makeText(context, "Start sharing to cast photos to this TV", Toast.LENGTH_SHORT).show()
+                return@LaunchedEffect
+            }
             val bytes = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
                 try { currentItem.file.readBytes() } catch (e: Exception) { null }
             }

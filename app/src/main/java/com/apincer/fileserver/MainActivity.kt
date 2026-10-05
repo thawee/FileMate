@@ -8,6 +8,7 @@ import android.os.Bundle
 import android.os.Environment
 import android.provider.Settings
 import android.widget.Toast
+import com.apincer.fileserver.sharing.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -97,15 +98,27 @@ import com.google.zxing.BarcodeFormat
 import com.google.zxing.qrcode.QRCodeWriter
 
 class MainActivity : AppCompatActivity() {
+    private var incomingFiles by mutableStateOf<List<Uri>>(emptyList())
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        incomingFiles = incomingContentUris(intent)
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        incomingFiles = incomingContentUris(intent)
         setContent {
             com.apincer.fileserver.theme.FileMateTheme {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
-                    WebFSScreen()
+                    WebFSScreen(incomingFiles = incomingFiles, onIncomingHandled = {
+                        incomingFiles = emptyList()
+                        setIntent(Intent(this, MainActivity::class.java).setAction(Intent.ACTION_MAIN))
+                    })
                 }
             }
         }
@@ -148,13 +161,17 @@ fun formatBytes(bytes: Long): String {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun WebFSScreen() {
+fun WebFSScreen(incomingFiles: List<Uri> = emptyList(), onIncomingHandled: () -> Unit = {}) {
     var showHostTools by remember { mutableStateOf(false) }
     var hostToolsInitialTab by remember { mutableStateOf(0) }
     val viewModel: FileBrowserViewModel = viewModel()
     val files by viewModel.files.collectAsState()
     
     val currentPath by viewModel.currentPath.collectAsState()
+    val selectedPaths by viewModel.selectedPaths.collectAsState()
+    var confirmReceive by remember { mutableStateOf(false) }
+    var receiving by remember { mutableStateOf(false) }
+    var receiveStatus by remember { mutableStateOf<String?>(null) }
     var previewIndex by remember { mutableStateOf<Int?>(null) }
     var editorFileItem by remember { mutableStateOf<FileItem?>(null) }
 
@@ -283,12 +300,19 @@ fun WebFSScreen() {
     }
 
     // Global Cast image when page changes
-    LaunchedEffect(slideshowActive, slideshowIndex, activeCaster) {
-        if (slideshowActive && slideshowSlides.isNotEmpty()) {
+    LaunchedEffect(slideshowActive, slideshowIndex, activeCaster, previewIndex, isServerRunning) {
+        if (slideshowActive && slideshowSlides.isNotEmpty() && previewIndex == null) {
             activeCaster?.let { caster ->
-                val slide = slideshowSlides[slideshowIndex]
+                val slide = slideshowSlides.getOrNull(slideshowIndex) ?: return@LaunchedEffect
+                val imageUrl = if (caster is com.apincer.fileserver.cast.DlnaCaster) {
+                    withContext(Dispatchers.IO) { photoShareUrl(java.io.File(slide.id), primaryIp) }
+                } else slide.imageUrl
+                if (imageUrl == null) {
+                    Toast.makeText(context, "Start sharing to cast photos to this TV", Toast.LENGTH_SHORT).show()
+                    return@LaunchedEffect
+                }
                 val bytes = slide.fetchImageBytes?.invoke()
-                caster.showImage(slide.imageUrl, bytes)
+                caster.showImage(imageUrl, bytes)
             }
         }
     }
@@ -297,7 +321,7 @@ fun WebFSScreen() {
         AlertDialog(
             onDismissRequest = { showPermissionRationale = false },
             title = { Text("Permission Required") },
-            text = { Text("File Mate needs 'All files access' permission to serve files from your device storage to your local network.") },
+            text = { Text("ShareMate needs 'All files access' permission to serve files from your device storage to your local network.") },
             confirmButton = {
                 Button(onClick = {
                     showPermissionRationale = false
@@ -369,7 +393,7 @@ fun WebFSScreen() {
                 modifier = Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface)
             ) {
                 TopAppBar(
-                    title = { Text("File Mate", fontWeight = FontWeight.Bold) },
+                    title = { Text("ShareMate", fontWeight = FontWeight.Bold) },
                     navigationIcon = {
                         IconButton(onClick = { viewModel.navigateUp() }) {
                             Icon(Icons.Default.ArrowBack, contentDescription = "Up")
@@ -421,6 +445,38 @@ fun WebFSScreen() {
                     }
                 )
 
+                ShareControls(
+                    currentFolder = currentPath, selectedPaths = selectedPaths, root = viewModel.rootDir,
+                    primaryIp = primaryIp, onStartServer = { requestAllFilesAccessAndStart() },
+                    onPresent = {
+                        val photos = files.filter { !it.isDirectory && it.mimeType.startsWith("image/") }
+                        if (photos.isNotEmpty()) {
+                            CastingState.slides.value = photos.map { photo ->
+                                com.apincer.fileserver.ui.SlideItem(
+                                    id = photo.path, imageUrl = Uri.fromFile(photo.file).toString(),
+                                    title = photo.name, description = formatBytes(photo.size),
+                                    fetchImageBytes = { withContext(Dispatchers.IO) { runCatching { photo.file.readBytes() }.getOrNull() } }
+                                )
+                            }
+                            CastingState.currentIndex.value = 0
+                            CastingState.slideshowActive.value = true
+                            CastingState.isPlaying.value = true
+                            showSlideshowScreen = true
+                        } else Toast.makeText(context, "Open a folder with photos to present", Toast.LENGTH_SHORT).show()
+                    }
+                )
+                if (incomingFiles.isNotEmpty()) {
+                    Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
+                        Text("Receive ${incomingFiles.size} files. Browse to a destination folder.", style = MaterialTheme.typography.bodySmall)
+                        Text(currentPath.absolutePath, style = MaterialTheme.typography.bodySmall)
+                        Row {
+                            Button(enabled = !receiving, onClick = { confirmReceive = true }) { Text(if (receiving) "Saving…" else "Save here") }
+                            TextButton(enabled = !receiving, onClick = onIncomingHandled) { Text("Cancel") }
+                        }
+                    }
+                }
+                receiveStatus?.let { Text(it, modifier = Modifier.padding(horizontal = 16.dp), style = MaterialTheme.typography.bodySmall) }
+
                 FileBrowserScreen(
                     viewModel = viewModel,
                     modifier = Modifier.weight(1f),
@@ -454,14 +510,33 @@ fun WebFSScreen() {
         }
     }
 
+    if (confirmReceive) AlertDialog(onDismissRequest = { confirmReceive = false },
+        title = { Text("Save received files?") },
+        text = { Text("Save ${incomingFiles.size} files to ${currentPath.absolutePath}. Files with existing names will be kept and reported as conflicts.") },
+        confirmButton = { TextButton(onClick = {
+            confirmReceive = false; receiving = true
+            val destination = currentPath
+            val sources = incomingFiles.toList()
+            coroutineScope.launch {
+                try {
+                    val result = withContext(Dispatchers.IO) { receiveFiles(context.contentResolver, sources, destination) }
+                    receiveStatus = "Saved ${result.saved} files. ${result.failures.size} failed." + if (result.failures.isNotEmpty()) "\n" + result.failures.joinToString("\n") else ""
+                    if (result.saved > 0) android.media.MediaScannerConnection.scanFile(context, arrayOf(destination.absolutePath), null, null)
+                    onIncomingHandled()
+                    viewModel.reload()
+                } catch (e: Exception) { receiveStatus = e.message ?: "Could not save files" }
+                finally { receiving = false }
+            }
+        }) { Text("Save files") } },
+        dismissButton = { TextButton(onClick = { confirmReceive = false }) { Text("Cancel") } })
+
     previewIndex?.let { index ->
         val mediaFiles = files.filter { !it.isDirectory && it.mimeType.startsWith("image/") }
         LaunchedEffect(mediaFiles) {
-            val primary = com.apincer.fileserver.getLocalIpAddresses().firstOrNull() ?: "127.0.0.1"
             val slides = mediaFiles.map { file ->
                 com.apincer.fileserver.ui.SlideItem(
                     id = file.path,
-                    imageUrl = "http://$primary:8080/files/${file.path}",
+                    imageUrl = Uri.fromFile(file.file).toString(),
                     title = file.name,
                     description = "${file.size / 1024} KB",
                     fetchImageBytes = {
