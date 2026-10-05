@@ -18,27 +18,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.viewinterop.AndroidView
-import androidx.mediarouter.app.MediaRouteButton
-import com.google.android.gms.cast.framework.CastButtonFactory
 import com.apincer.fileserver.cast.CastingState
 import com.apincer.fileserver.cast.TvCaster
-
-@Composable
-fun GoogleCastButton(modifier: Modifier = Modifier) {
-    AndroidView(
-        modifier = modifier.size(48.dp),
-        factory = { context ->
-            val themedContext = androidx.appcompat.view.ContextThemeWrapper(
-                context, 
-                androidx.appcompat.R.style.Theme_AppCompat_NoActionBar
-            )
-            MediaRouteButton(themedContext).apply {
-                CastButtonFactory.setUpMediaRouteButton(themedContext, this)
-            }
-        }
-    )
-}
 
 @Composable
 fun UnifiedCastButton(modifier: Modifier = Modifier, iconTint: Color = MaterialTheme.colorScheme.primary) {
@@ -76,19 +57,11 @@ fun UnifiedCastSheet(
             Text("Cast to Device", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
             Spacer(modifier = Modifier.height(16.dp))
 
-            // Chromecast Section
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Default.Cast, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-                    Spacer(modifier = Modifier.width(16.dp))
-                    Text("Google Cast Devices")
-                }
-                GoogleCastButton()
-            }
+            Text(
+                "For TVs with a browser, open a shared photo folder and choose Present photos. Direct photo casting uses AirPlay or DLNA.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
 
             Divider(modifier = Modifier.padding(vertical = 8.dp))
             

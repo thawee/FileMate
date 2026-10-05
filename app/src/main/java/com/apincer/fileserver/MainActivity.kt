@@ -467,7 +467,7 @@ fun WebFSScreen(incomingFiles: List<Uri> = emptyList(), onIncomingHandled: () ->
                 )
                 if (incomingFiles.isNotEmpty()) {
                     Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
-                        Text("Receive ${incomingFiles.size} files. Browse to a destination folder.", style = MaterialTheme.typography.bodySmall)
+                        Text("${incomingFiles.size} incoming ${if (incomingFiles.size == 1) "file" else "files"}. Choose a destination folder.", style = MaterialTheme.typography.bodySmall)
                         Text(currentPath.absolutePath, style = MaterialTheme.typography.bodySmall)
                         Row {
                             Button(enabled = !receiving, onClick = { confirmReceive = true }) { Text(if (receiving) "Saving…" else "Save here") }
@@ -512,7 +512,7 @@ fun WebFSScreen(incomingFiles: List<Uri> = emptyList(), onIncomingHandled: () ->
 
     if (confirmReceive) AlertDialog(onDismissRequest = { confirmReceive = false },
         title = { Text("Save received files?") },
-        text = { Text("Save ${incomingFiles.size} files to ${currentPath.absolutePath}. Files with existing names will be kept and reported as conflicts.") },
+        text = { Text("Save ${incomingFiles.size} ${if (incomingFiles.size == 1) "file" else "files"} to ${currentPath.absolutePath}. Existing files stay unchanged; matching names are reported as conflicts.") },
         confirmButton = { TextButton(onClick = {
             confirmReceive = false; receiving = true
             val destination = currentPath
@@ -520,7 +520,7 @@ fun WebFSScreen(incomingFiles: List<Uri> = emptyList(), onIncomingHandled: () ->
             coroutineScope.launch {
                 try {
                     val result = withContext(Dispatchers.IO) { receiveFiles(context.contentResolver, sources, destination) }
-                    receiveStatus = "Saved ${result.saved} files. ${result.failures.size} failed." + if (result.failures.isNotEmpty()) "\n" + result.failures.joinToString("\n") else ""
+                    receiveStatus = "Saved ${result.saved} ${if (result.saved == 1) "file" else "files"}. ${result.failures.size} failed." + if (result.failures.isNotEmpty()) "\n" + result.failures.joinToString("\n") else ""
                     if (result.saved > 0) android.media.MediaScannerConnection.scanFile(context, arrayOf(destination.absolutePath), null, null)
                     onIncomingHandled()
                     viewModel.reload()

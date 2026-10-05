@@ -1393,7 +1393,7 @@ async function fetchFiles() {
                 <div style="max-width: 360px; margin: 2rem auto; text-align: center; padding: 2rem; background: var(--card-bg, rgba(30, 27, 75, 0.4)); border: 1px solid var(--panel-border); border-radius: 12px;">
                     <div style="font-size: 2.5rem; margin-bottom: 0.75rem;">🔒</div>
                     <h3 style="margin-bottom: 0.5rem; color: var(--text-color);">PIN Required</h3>
-                    <p style="color: var(--text-muted); font-size: 0.88rem; margin-bottom: 1.25rem;">Enter the 4-digit PIN displayed on your Android FileMate app screen.</p>
+                    <p style="color: var(--text-muted); font-size: 0.88rem; margin-bottom: 1.25rem;">Enter the 4-digit PIN displayed in ShareMate on your phone.</p>
                     <div style="display: flex; gap: 0.5rem; justify-content: center; margin-bottom: 0.75rem;">
                         <input type="password" id="manualPinInput" maxlength="8" placeholder="••••" style="width: 140px; text-align: center; font-size: 1.25rem; letter-spacing: 4px; padding: 0.5rem; border-radius: 8px; border: 1px solid var(--panel-border); background: var(--bg-color, #0f172a); color: var(--text-color, #fff);" onkeydown="if(event.key==='Enter')submitManualPin()" autofocus />
                         <button class="btn primary-btn" onclick="submitManualPin()" style="padding: 0.5rem 1.25rem;">Unlock</button>
@@ -1748,9 +1748,7 @@ function processNextUpload() {
         try {
             const response = JSON.parse(xhr.responseText);
             if (typeof response.error === 'string') error = response.error;
-        } catch (_) {
-            // HTTP responses may contain a plain-text error instead of JSON.
-        }
+        } catch (_) {}
         finish('failed', error);
     };
     xhr.onerror = () => finish('failed', 'Connection lost. Check the phone and Wi-Fi, then retry.');

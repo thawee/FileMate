@@ -1,8 +1,19 @@
-# 📦 File Mate Changelog
+# ShareMate changelog
 
-All notable changes to the **File Mate** Android Application and Web Frontend file server project will be documented in this file.
+This changelog records changes to the ShareMate Android app and browser dashboard.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to Semantic Versioning.
+
+## [Unreleased]
+
+- Rebrand File Mate as ShareMate while preserving the application ID and installed data.
+- Add expiring, revocable guest links for selected files and folders, with download, upload, or combined access.
+- Keep guest routes separate from owner file management. Restrict uploads to the selected folder and refuse existing filenames.
+- Fix an authentication bypass caused by public-route substring matching combined with protected-route suffix matching.
+- Receive files from Android's Share menu with an explicit destination and copy results.
+- Add a folder photo-presentation action.
+- Add a browser transfer queue with per-file progress, cancellation, and retry.
+- Correct documentation about fixed server ports and unverified casting compatibility.
 
 ## [2.2.1] - 2026-09-29
 

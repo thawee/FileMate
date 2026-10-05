@@ -371,6 +371,7 @@ public class NioHttpServer implements Runnable {
 
     private volatile boolean isRunning = false;
     private final int port;
+    private volatile int boundPort;
     private Handler httpHandler = null;
     private WebSocket.Handler webSocketHandler = null;
     private Selector selector;
@@ -525,6 +526,10 @@ public class NioHttpServer implements Runnable {
         this.onReady = onReady;
     }
 
+    public int getBoundPort() {
+        return boundPort;
+    }
+
     @Override
     public void run() {
         isRunning = true;
@@ -563,6 +568,7 @@ public class NioHttpServer implements Runnable {
 
                 serverSocketChannel.setOption(StandardSocketOptions.SO_REUSEADDR, true);
                 serverSocketChannel.bind(new InetSocketAddress(port), socketBacklog);
+                boundPort = ((InetSocketAddress) serverSocketChannel.getLocalAddress()).getPort();
                 serverSocketChannel.configureBlocking(false);
                 serverSocketChannel.register(selector, SelectionKey.OP_ACCEPT);
                 if (onReady != null) onReady.run();

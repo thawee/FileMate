@@ -1,3 +1,56 @@
+# ShareMate implementation
+
+- [x] Read the Principles section of the **poteto-mode** skill.
+- [x] Phase A: Frame.
+- [x] Phase B: Design the workflow.
+- [x] Phase C: Run the loop.
+- [x] Ground the sharing, Android intent, transfer, and slideshow paths.
+- [x] Compare two session designs and choose the simplest complete contract.
+- [x] Fix owner authentication bypass through compound `/api/auth/.../api/files` and mutation paths; add route regression coverage before guest links.
+- [x] Replace invalid DLNA `/files/` image URLs with scoped receiver download URLs; keep unsupported Google photo casting out of the primary photo chooser.
+- [x] Implement scoped sessions and their browser experience.
+- [x] Implement Android receiving, ShareMate branding, and photo presentation entry points.
+- [x] Implement cancellable browser transfers and retry.
+- [x] Verify unit tests, APK, browser behavior, and Android behavior.
+- [x] Phase D: Keep the audit trail.
+- [x] Phase E: Verify and hand back.
+
+Verified 29 debug unit tests, six browser queue tests, three real Android receiving tests, native share creation and incoming-copy UI, browser scope/revoke/conflicts/active-content protection, and native and browser photo presentation. Fixed a socket-test port reservation race by binding directly to port zero. Physical TV receiver compatibility is unverified. Google photo casting needs a custom receiver and is deferred. Opening a PR is skipped because this request is a local app improvement, with no publishing requested.
+
+Definition of done: users can share a selected folder or files with expiring, permission-scoped access, revoke that access, receive Android shared content, cancel and retry browser uploads, and start a photo presentation. The app and web dashboard use ShareMate. Existing owner file-management and download behavior remains available. Casting is tested where receivers are available and otherwise reported as unverified.
+
+Throughput checkpoint:
+
+- Blocking first steps. Trace authorization and storage behavior, choose the share-session contract, and capture baseline tests before implementation.
+- Independent workstreams. Browser transfer controls can be implemented separately from the coupled server and Android sharing workflow.
+- Shared mutable state. Each writing worker uses an isolated worktree. Integrate patches sequentially. The main agent owns task records and final verification.
+- Smallest safe decomposition. One worker owns server and Android session integration, one owns browser transfers. Branding and docs follow integration.
+
+Scope is one local release across the Android UI, server, browser assets, tests, and documentation. Preserve the application ID and installed data. Do not deploy or publish.
+
+# Positioning and rebrand investigation
+
+- [x] Route through the **how** skill. For motivation questions, also route through the **why** skill.
+- [x] Throughput checkpoint stays one line: `throughput checkpoint: n/a, read-only investigation`.
+- [x] Produce the `how`-shaped output (Overview / Key Concepts / How It Works / Where Things Live / Gotchas), or a recommendation with a tradeoffs table if the request is a decision between alternatives.
+- [x] Apply the **unslop** skill to the reply.
+- [x] Inspect actual sharing, viewing, and casting behavior and limitations.
+- [x] Recommend a Mate-series name, product promise, and prioritized improvements.
+
+Proposed direction is ShareMate, local file and photo sharing through a browser, with photo presentation as a supporting workflow. FarmMate serves hobby and professional farming.
+
+Implementation results:
+
+- [x] Add selected-file or folder sharing sessions with explicit permissions and expiry.
+- [x] Receive files through the Android Share menu.
+- [x] Add a transfer queue with cancellation and retry.
+- [x] Make folder photo presentation easy to reach and correct DLNA receiver URLs.
+- [ ] Verify casting on actual receivers. No physical receiver is available in this session.
+- [x] Remove the unsupported Google photo destination from the primary chooser. A custom receiver remains a separate future feature.
+- [x] Correct the README's configurable-port claim. The current service defines fixed ports.
+
+Validation for this investigation uses source inspection and the diff against main. Builds and device tests apply to a later implementation. No runtime compatibility claims were verified.
+
 # Step-by-Step UI/UX Implementation Plan: FileMate (Android & WebUI)
 
 ## Phase 1: High-Impact Usability & Performance Fixes (Immediate)

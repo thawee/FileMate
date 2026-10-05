@@ -8,7 +8,6 @@ import org.junit.After
 import org.junit.Before
 import org.junit.Test
 import java.io.File
-import java.net.ServerSocket
 import java.net.Socket
 import java.nio.file.Files
 import java.util.concurrent.CountDownLatch
@@ -31,8 +30,7 @@ class ShareRoutesTest {
         File(folder, "photo.jpg").writeText("shared-image")
         File(root, "private.txt").writeText("owner-only")
         store = ShareSessionStore(now::get)
-        port = ServerSocket(0).use { it.localPort }
-        server = NioHttpServer(port).apply { setMaxThread(2); setMaxRequestSize(500 * 1024 * 1024) }
+        server = NioHttpServer(0).apply { setMaxThread(2); setMaxRequestSize(500 * 1024 * 1024) }
         val routes = ShareRoutes(store, { "guest-resource".toByteArray() }, { file, _ -> NioHttpServer.HttpResponse().setBody(file.readBytes()) })
         server.registerHttpHandler { request ->
             val target = NioHttpServer.splitRequestTarget(request.path)
@@ -50,6 +48,7 @@ class ShareRoutesTest {
         server.setOnReady { ready.countDown() }
         thread = Thread(server).apply { isDaemon = true; start() }
         assertTrue("Server must bind before issuing requests", ready.await(5, TimeUnit.SECONDS))
+        port = server.boundPort
     }
 
     @After fun stop() { server.stop(); thread.join(5000); root.deleteRecursively() }

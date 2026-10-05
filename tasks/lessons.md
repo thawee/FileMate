@@ -2,6 +2,8 @@
 
 ## Lessons & Best Practices
 
+- **Confirm sibling app domains before recommending a brand.** FarmMate is for hobby and professional farming. Do not infer an app's purpose from an ambiguous spelling or assume photo-frame functionality.
+
 1. **Verify Backend Endpoints Against Frontend API Calls**:
    - **Pattern**: The web frontend JS triggered `POST /api/upload?path=...`, but the Android Kotlin backend lacked the `/api/upload` route in `handleRoute()`, leading to silent 404 upload failures.
    - **Rule**: Always map every `fetch()` and `XMLHttpRequest` call in frontend assets to a corresponding backend endpoint handler before considering feature complete.

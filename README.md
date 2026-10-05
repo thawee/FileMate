@@ -1,4 +1,4 @@
-# 📁 File Mate: Android Local File Server & Storage Maintenance Suite
+# ShareMate: share files and photos with nearby devices
 
 [![Android](https://img.shields.io/badge/Platform-Android_8.0%2B-brightgreen.svg)](https://developer.android.com)
 [![Kotlin](https://img.shields.io/badge/Language-Kotlin-blue.svg)](https://kotlinlang.org/)
@@ -7,18 +7,23 @@
 [![Build](https://img.shields.io/badge/Build-Gradle_9.6-025E8D.svg)](build.gradle.kts)
 [![License](https://img.shields.io/badge/License-MIT-lightgrey.svg)](LICENSE)
 
-**File Mate** is a lightweight, high-performance Android application that converts your mobile device into a local HTTP File Server with an interactive Web Dashboard and native storage maintenance tools. Part of the **Mate Series** ecosystem (`Music Mate`, `Trip Mate`, `Trading Mate`, `File Mate`).
+**ShareMate** shares files and photos from your Android device through a browser on the same local network. It belongs to the Mate series alongside MusicMate, TradingMate, FarmMate, and BillMate.
 
-Whether you need to transfer large files wirelessly across your local network, view photo slideshows, edit/read code files, clean up OS junk files (`.DS_Store`, `Thumbs.db`, `desktop.ini`), or remove empty directories, **File Mate** provides a complete solution with zero third-party cloud dependencies.
+Choose files or a folder, create an expiring guest link, and show its QR code to a recipient. You can allow downloads, receive uploads into a folder, or allow both. Photo viewing and slideshows support the sharing workflow. Owner file management, proxy, and storage maintenance remain available separately.
+
+The application ID remains `com.apincer.fileserver`, so the rebrand preserves existing installs and app data.
 
 ---
 
 ## ✨ Key Features
 
 ### 📡 Local Web File Server & Sharing
-- **Zero-Configuration Server:** Instantly host files over local Wi-Fi on customizable HTTP ports.
+- **Local browser access:** The file server uses port 8080. The optional proxy uses port 8081. These ports are fixed.
+- **Scoped guest links:** Share selected files or a folder for 15 minutes, one hour, or one day. Revoke a link from the app. Stopping the server invalidates its links.
+- **Separate permissions:** Download guests can access only the selected content. Upload-only guests can send files into the chosen folder without browsing its existing files. Guest uploads are limited to 20 MiB per file and refuse filename conflicts.
+- **Photo presentation:** View shared photos in the guest browser or start a local slideshow from a photo folder. Recipients can save images delivered to their browser.
 - **PIN Authentication & QR Code Pairing:** Auto-generates a secure 4-digit PIN on startup. Scan the dynamic QR code in the app to quickly connect and authenticate, with persistent browser sessions across page reloads.
-- **Robust Local Low-Latency Delivery:** Fast, uncompressed UTF-8 JSON streaming for low-latency operations on local Wi-Fi, fully compatible with reverse proxies, sub-paths, and external HTTP clients.
+- **Owner access:** The owner dashboard keeps PIN authentication and file-management actions. API routes use exact matching. A reverse proxy must forward the original root paths.
 - **Zero-Copy File Streaming:** Uses native `FileChannel.transferTo()` with full support for `HTTP 206 Partial Content` Range requests, allowing you to stream large 4K movies or seek through audio files straight from the browser without draining the phone's battery.
 - **Foreground Service & Wakelock:** Runs reliably in the background with a CPU Wakelock to ensure long batch downloads or heavy uploads are never interrupted when the screen turns off.
 - **Real-Time Traffic Monitor:** Tracks live Upload (`Tx`) and Download (`Rx`) speeds.
@@ -29,9 +34,9 @@ Whether you need to transfer large files wirelessly across your local network, v
 - **Storage Analytics & Breakdown:** Computes category storage distribution (Images, Videos, Audio, Documents, Archives, Other) and lists the **Top 10 Largest Files**.
 - **On-Device Cleanup:** Run cleanup from the Android Tools & Proxy Hub; the web dashboard displays storage capacity but does not expose cleanup endpoints.
 
-### 📺 Media Casting (AirPlay & DLNA)
-- **Local Network Discovery:** Uses Android `NsdManager` (mDNS) to instantly find local smart TVs, DLNA media renderers, and Apple AirPlay devices.
-- **Direct Wireless Streaming:** Cast high-quality JPEG images straight from your device to compatible TVs via the Android app's "Cast Media" tab.
+### Photo presentation and casting
+- Open an image folder and choose **Present photos** to start a local slideshow.
+- AirPlay and DLNA discovery and image delivery are implemented. Receiver compatibility requires testing with the particular device. Google photo casting requires a custom receiver and remains outside this release; see the [Google Cast receiver guide](https://developers.google.com/cast/docs/web_receiver).
 
 ### 🎨 Modern Web Dashboard (Web UI)
 - **Responsive Dark Theme:** Built with modern CSS Glassmorphism, smooth animations, and high-contrast typography.
@@ -47,12 +52,14 @@ Whether you need to transfer large files wirelessly across your local network, v
   - **Keyboard Shortcuts:** `←`, `→` for navigation, `Space` to Play/Pause, `F` for Fullscreen, `+` / `-` to Zoom In/Out, `0` to Reset Zoom, `Delete` to Quick Delete, `Esc` to Close.
 - **Text & Code File Viewer:** Formatted code previewer for source files (`.txt`, `.json`, `.md`, `.js`, `.py`, `.html`, `.css`, `.kt`, `.java`, `.sh`, `.xml`, etc.).
 - **Drag & Drop File Uploads:** Supports binary byte stream and multipart form-data uploads up to **500 MB** per request.
+- **Transfer queue:** Owner browser uploads keep their destination when queued. Cancel queued or active transfers, retry failed or cancelled transfers, and inspect per-file progress. Cancelling cannot remove a file the server has already received.
 - **Batch Actions & Archives:** Batch selection for bulk moving, deleting, or **downloading as a single `.zip` file**, including filenames with commas. ZIP extraction creates a new destination folder; it refuses to replace an existing folder and does not publish partially extracted files.
 - **Media Thumbnails:** Generates and caches fast, memory-optimized thumbnails for image and video galleries.
 - **Recursive Search:** Instantly scan directories and their children for specific files.
 - **Animated Toast System:** Modern floating toast notifications replacing intrusive browser popups.
 
 ### 📱 Android Native Experience (Jetpack Compose)
+- **Receive from other apps:** Choose ShareMate in Android's Share menu, confirm a destination folder, and copy the received content without replacing existing files.
 - **Predictive Hierarchical Back Navigation:** Intercepts system back gestures with `BackHandler` to traverse subdirectories before exiting the app.
 - **Adaptive Responsive Grid:** Automatically adapts column count on foldables, tablets, and landscape viewports (`GridCells.Adaptive(minSize = 130.dp)`).
 - **In-App Double-Tap Zoom:** Double-tap gesture zoom ($1\times \leftrightarrow 2.5\times$) in native image preview.
@@ -68,7 +75,7 @@ Whether you need to transfer large files wirelessly across your local network, v
 
 ## 🏗️ Architecture & Project Structure
 
-**File Mate** is organized into a modular Android app directory structure:
+**ShareMate** is organized into a modular Android app directory structure:
 
 ```
 FileMate/
@@ -104,7 +111,7 @@ FileMate/
 
 ## 🔌 HTTP API Specifications
 
-File Mate exposes a set of RESTful HTTP endpoints for remote management:
+ShareMate exposes a set of RESTful HTTP endpoints for remote management:
 
 | Endpoint | Method | Description | Query / Body Parameters |
 | :--- | :---: | :--- | :--- |
@@ -157,8 +164,24 @@ For batch operations, repeat the URL-encoded `name` parameter for each complete 
 
 ## 📱 How to Use
 
+### Share selected content
+
+1. Connect both devices to the same Wi-Fi network or phone hotspot.
+2. Open the folder in ShareMate and choose **Share folder**, or select files and choose **Share selected**.
+3. Choose the permission mode and expiry, then create the link.
+4. Show the guest QR code or copy the link to the recipient.
+5. Revoke access from the active shares list when finished.
+
+Owner connection QR codes grant file-management access. Guest share QR codes grant only the selected content and permission mode. Use the guest code for recipients.
+
+### Receive files from another Android app
+
+1. Select files in Gallery or another app and choose **ShareMate** in its Share menu.
+2. Confirm the destination folder in ShareMate.
+3. Review the copy results. Existing filenames remain unchanged.
+
 ### 1. Launch Server on Android
-1. Open the **File Mate** app on your Android device.
+1. Open the **ShareMate** app on your Android device.
 2. Grant storage permissions if prompted (`All Files Access` or `Storage Permission`).
 3. Tap **Start Server**.
 4. The status indicator will glow green, showing your local IP address (e.g., `http://192.168.1.100:8080`).
@@ -176,11 +199,15 @@ For batch operations, repeat the URL-encoded `name` parameter for each complete 
 
 ## 🧪 Testing & Verification
 
-File Mate includes unit tests for request-body assembly, archive extraction, batch filenames, QR URLs, native name validation, directory load ordering, image naming and security boundaries:
+ShareMate includes unit tests for request-body assembly, archive extraction, batch filenames, QR URLs, native name validation, directory load ordering, image naming and security boundaries:
 
 ```bash
 ./gradlew test
 ```
+
+Run the browser transfer checks with `node --test tools/verify/browser-upload-queue.test.cjs`.
+
+For a running app forwarded to local port 18080, set `SHAREMATE_PIN` to its current owner PIN and run `node tools/verify-sharemate.mjs`. The script creates a unique test folder under Download, checks actual guest and owner HTTP routes, revokes its shares, and removes only that test folder. Set `SHAREMATE_URL` for another address. Optional browser verification accepts `SHAREMATE_PLAYWRIGHT` as the installed Playwright package path and `SHAREMATE_CHROME` as a browser executable path.
 
 Examples of unit-test coverage:
 - ✅ **Path Traversal Normalization:** Verifies `../` directory escape prevention.
