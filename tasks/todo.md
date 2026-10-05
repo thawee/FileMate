@@ -4,10 +4,12 @@
 - [x] Update version to 2.3.0 and code 12, finalize release notes, include the user documentation and emulator screenshots.
 - [x] Verify current builds and tests, inspect APK metadata, and run the updated app on the emulator.
 - [x] Resolve APK signing choice. User chose a clearly labeled debug-signed preview APK. Publish as a GitHub prerelease.
-- [ ] Commit verified files and publish main and the v2.3.0 tag without rewriting remote history.
-- [ ] Create the GitHub release with verified assets and confirm published metadata and downloads.
+- [x] Commit verified files and publish main and the v2.3.0 tag without rewriting remote history.
+- [x] Create the GitHub release with verified assets and confirm published metadata and downloads.
 
 Throughput checkpoint. Builds and browser queue tests are independent. Signing and publishing depend on the user's APK choice. PR merge-chain steps are skipped because no PR chain exists. No force push or deployment.
+
+Published https://github.com/thawee/FileMate/releases/tag/v2.3.0 as a prerelease at commit 2050cd9. Uploaded ShareMate-2.3.0-preview-debug.apk and SHA256SUMS.txt, then downloaded both assets and confirmed byte hashes. Prove It Works used actual APK metadata, emulator launch, and published downloads. Debug and unsigned release builds passed; 29 unit tests and six browser tests passed.
 
 # User documentation refresh
 
