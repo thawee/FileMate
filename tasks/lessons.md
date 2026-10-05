@@ -2,6 +2,8 @@
 
 ## Lessons & Best Practices
 
+- Keep README focused on user tasks. Put architecture, APIs, build commands, and test instructions in a linked technical document. Capture real app screenshots with clean demo content and no PIN or live guest tokens.
+
 - **Confirm sibling app domains before recommending a brand.** FarmMate is for hobby and professional farming. Do not infer an app's purpose from an ambiguous spelling or assume photo-frame functionality.
 
 1. **Verify Backend Endpoints Against Frontend API Calls**:

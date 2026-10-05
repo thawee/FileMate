@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+## [2.3.0] - 2026-10-05
+
 - Rebrand File Mate as ShareMate while preserving the application ID and installed data.
 - Add expiring, revocable guest links for selected files and folders, with download, upload, or combined access.
 - Keep guest routes separate from owner file management. Restrict uploads to the selected folder and refuse existing filenames.
@@ -13,6 +15,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Receive files from Android's Share menu with an explicit destination and copy results.
 - Add a folder photo-presentation action.
 - Add a browser transfer queue with per-file progress, cancellation, and retry.
+- Fix DLNA photo URLs to use scoped download links. Direct Google Cast photo delivery remains unsupported.
+- Rewrite the README around user tasks, add emulator screenshots, and move developer details into a technical reference.
 - Correct documentation about fixed server ports and unverified casting compatibility.
 
 ## [2.2.1] - 2026-09-29

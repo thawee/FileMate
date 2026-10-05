@@ -1,3 +1,28 @@
+# ShareMate 2.3.0 release
+
+- [x] Resolve the forge and destination. GitHub API with existing credential helper; thawee/FileMate main. GitHub CLI is unavailable. This is a versioned release, not a PR merge chain.
+- [x] Update version to 2.3.0 and code 12, finalize release notes, include the user documentation and emulator screenshots.
+- [x] Verify current builds and tests, inspect APK metadata, and run the updated app on the emulator.
+- [x] Resolve APK signing choice. User chose a clearly labeled debug-signed preview APK. Publish as a GitHub prerelease.
+- [ ] Commit verified files and publish main and the v2.3.0 tag without rewriting remote history.
+- [ ] Create the GitHub release with verified assets and confirm published metadata and downloads.
+
+Throughput checkpoint. Builds and browser queue tests are independent. Signing and publishing depend on the user's APK choice. PR merge-chain steps are skipped because no PR chain exists. No force push or deployment.
+
+# User documentation refresh
+
+- [x] Pin the behavior contract first. Use the existing README and shipped emulator UI as the documentation baseline. No application behavior changes.
+- [x] Name the target shape. README contains user tasks and emulator screenshots; docs/TECHNICAL.md contains developer reference.
+- [x] Subtract before you add. Move implementation details out of the README.
+- [x] Move in small behavior-preserving steps. Delegate technical reference; capture clean emulator screens and rewrite user instructions.
+- [x] Prove behavior is unchanged on the real artifact. Inspect screenshots, check source-backed instructions and local links, and run git diff --check.
+- [x] Confirm the change is worth keeping. Users can find sharing and photo instructions without reading API or build details.
+- [x] Rebase into small ordered commits. skip: documentation stays reviewable in the working tree; no PR requested.
+
+Throughput checkpoint. Technical reference writing is independent of emulator capture. Main owns README, screenshots, and final checks. Code characterization and architecture workflows are skipped because this task changes documentation only.
+
+Verified all local document links and three raw emulator PNG captures. Inspected each screenshot and matched user instructions to the shipped UI. Removed the old broken LICENSE link because this repository contains no license file. No application code changed.
+
 # ShareMate implementation
 
 - [x] Read the Principles section of the **poteto-mode** skill.
