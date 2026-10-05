@@ -1691,65 +1691,161 @@ function renderFiles(files) {
     updateBatchToolbar();
 }
 
-async function handleFileUpload(event) {
+function handleFileUpload(event) {
     handleFiles(event.target.files);
     event.target.value = '';
 }
 
-async function handleFiles(files) {
+let uploadTasks = [];
+let nextUploadId = 1;
+
+function handleFiles(files) {
     if (!files || files.length === 0) return;
+    for (const file of Array.from(files)) {
+        uploadTasks.push({
+            id: nextUploadId++, file, destination: currentPath,
+            status: 'queued', progress: 0, error: '', xhr: null
+        });
+    }
+    renderUploadQueue();
+    processNextUpload();
+}
 
-    const progressContainer = document.getElementById('uploadProgressContainer');
-    const progressBar = document.getElementById('uploadProgressBar');
-    const uploadFilename = document.getElementById('uploadFilename');
+function processNextUpload() {
+    if (uploadTasks.some(task => task.status === 'uploading')) return;
+    const task = uploadTasks.find(task => task.status === 'queued');
+    if (!task) return;
 
-    progressContainer.style.display = 'block';
-    let uploadedCount = 0;
+    const xhr = new XMLHttpRequest();
+    task.status = 'uploading';
+    task.xhr = xhr;
+    renderUploadQueue();
 
-    for (let i = 0; i < files.length; i++) {
-        const file = files[i];
-        uploadFilename.textContent = file.name;
-        progressBar.style.width = '0%';
+    const finish = (status, error = '') => {
+        if (task.xhr !== xhr || task.status !== 'uploading') return;
+        task.status = status;
+        task.error = error;
+        task.xhr = null;
+        if (status === 'succeeded') {
+            task.progress = 100;
+            if (task.destination === currentPath) fetchFiles();
+        }
+        renderUploadQueue();
+        processNextUpload();
+    };
 
-        const formData = new FormData();
-        formData.append('file', file);
-
+    xhr.upload.onprogress = event => {
+        if (task.xhr !== xhr || task.status !== 'uploading' || !event.lengthComputable || event.total === 0) return;
+        task.progress = Math.min(100, Math.round(event.loaded / event.total * 100));
+        updateUploadProgress(task);
+    };
+    xhr.onload = () => {
+        if (xhr.status >= 200 && xhr.status < 300) {
+            finish('succeeded');
+            return;
+        }
+        let error = `Server returned ${xhr.status}`;
         try {
-            await new Promise((resolve, reject) => {
-                const xhr = new XMLHttpRequest();
-                xhr.open('POST', '/api/upload?path=' + encodeURIComponent(currentPath), true);
+            const response = JSON.parse(xhr.responseText);
+            if (typeof response.error === 'string') error = response.error;
+        } catch (_) {
+            // HTTP responses may contain a plain-text error instead of JSON.
+        }
+        finish('failed', error);
+    };
+    xhr.onerror = () => finish('failed', 'Connection lost. Check the phone and Wi-Fi, then retry.');
+    xhr.ontimeout = () => finish('failed', 'Upload timed out. Retry when the phone is reachable.');
+    xhr.onabort = () => finish('cancelled');
 
-                xhr.upload.onprogress = (e) => {
-                    if (e.lengthComputable) {
-                        const percentComplete = (e.loaded / e.total) * 100;
-                        progressBar.style.width = percentComplete + '%';
-                    }
-                };
+    try {
+        xhr.open('POST', '/api/upload?path=' + encodeURIComponent(task.destination), true);
+        for (const [name, value] of Object.entries(getAuthHeaders())) xhr.setRequestHeader(name, value);
+        const formData = new FormData();
+        formData.append('file', task.file);
+        xhr.send(formData);
+    } catch (error) {
+        finish('failed', error.message);
+    }
+}
 
-                xhr.onload = () => {
-                    if (xhr.status === 200) {
-                        uploadedCount++;
-                        resolve();
-                    } else {
-                        reject(new Error(`Server returned ${xhr.status}`));
-                    }
-                };
+function cancelUpload(id) {
+    const task = uploadTasks.find(task => task.id === id);
+    if (!task || !['queued', 'uploading'].includes(task.status)) return;
+    const xhr = task.xhr;
+    task.status = 'cancelled';
+    task.xhr = null;
+    if (xhr) xhr.abort();
+    renderUploadQueue();
+    processNextUpload();
+}
 
-                xhr.onerror = () => reject(new Error('Network error during upload'));
-
-                xhr.send(formData);
-            });
-        } catch (error) {
-            console.error('Error uploading file:', error);
-            showToast('Failed to upload ' + file.name + ': ' + error.message, 'error');
+function cancelAllUploads() {
+    const active = uploadTasks.find(task => task.status === 'uploading');
+    const xhr = active && active.xhr;
+    for (const task of uploadTasks) {
+        if (['queued', 'uploading'].includes(task.status)) {
+            task.status = 'cancelled';
+            task.xhr = null;
         }
     }
+    if (xhr) xhr.abort();
+    renderUploadQueue();
+}
 
-    progressContainer.style.display = 'none';
-    if (uploadedCount > 0) {
-        showToast(`Successfully uploaded ${uploadedCount} file(s)`, 'success');
-    }
-    fetchFiles();
+function retryUpload(id) {
+    const task = uploadTasks.find(task => task.id === id);
+    if (!task || !['failed', 'cancelled'].includes(task.status)) return;
+    task.status = 'queued';
+    task.progress = 0;
+    task.error = '';
+    renderUploadQueue();
+    processNextUpload();
+}
+
+function clearFinishedUploads() {
+    uploadTasks = uploadTasks.filter(task => ['queued', 'uploading'].includes(task.status));
+    renderUploadQueue();
+}
+
+function uploadStatusText(task) {
+    if (task.status === 'uploading') return task.progress === 100 ? 'Finishing...' : `Uploading ${task.progress}%`;
+    return { queued: 'Queued', succeeded: 'Uploaded', failed: 'Failed', cancelled: 'Cancelled' }[task.status];
+}
+
+function updateUploadProgress(task) {
+    document.getElementById(`upload-progress-${task.id}`).value = task.progress;
+    document.getElementById(`upload-status-${task.id}`).textContent = uploadStatusText(task);
+}
+
+function renderUploadQueue() {
+    document.getElementById('uploadProgressContainer').style.display = uploadTasks.length ? 'block' : 'none';
+    const pending = uploadTasks.filter(task => ['queued', 'uploading'].includes(task.status)).length;
+    const uploaded = uploadTasks.filter(task => task.status === 'succeeded').length;
+    const failed = uploadTasks.filter(task => task.status === 'failed').length;
+    const cancelled = uploadTasks.filter(task => task.status === 'cancelled').length;
+    document.getElementById('uploadQueueSummary').textContent =
+        `${uploaded} uploaded, ${pending} pending, ${failed} failed, ${cancelled} cancelled`;
+    document.getElementById('cancelUploadsBtn').disabled = pending === 0;
+    document.getElementById('clearUploadsBtn').disabled = pending === uploadTasks.length;
+    document.getElementById('uploadTaskList').innerHTML = uploadTasks.map(task => {
+        const fileName = escapeHtml(task.file.name);
+        const attributeName = fileName.replace(/"/g, '&quot;');
+        const active = ['queued', 'uploading'].includes(task.status);
+        const action = active ? 'cancelUpload' : 'retryUpload';
+        const label = active ? 'Cancel' : 'Retry';
+        const button = task.status === 'succeeded' ? '' :
+            `<button class="btn" onclick="${action}(${task.id})" aria-label="${label} ${attributeName}">${label}</button>`;
+        return `<li class="upload-task upload-task-${task.status}">
+            <div class="upload-task-details">
+                <span class="upload-task-name">${fileName}</span>
+                <span class="upload-task-destination">${formatBytes(task.file.size)} · To ${escapeHtml(task.destination ? 'Home/' + task.destination : 'Home')}</span>
+                <progress id="upload-progress-${task.id}" max="100" value="${task.progress}" aria-label="Upload progress for ${attributeName}"></progress>
+                <span class="upload-task-status" id="upload-status-${task.id}">${uploadStatusText(task)}</span>
+                ${task.error ? `<span class="upload-task-error">${escapeHtml(task.error)}</span>` : ''}
+            </div>
+            ${button}
+        </li>`;
+    }).join('');
 }
 
 function formatBytes(bytes, decimals = 2) {

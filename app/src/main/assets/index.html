@@ -68,12 +68,20 @@
             </div>
         </header>
 
-        <div class="upload-progress-container" id="uploadProgressContainer">
-            <div class="upload-text">Uploading <span id="uploadFilename">...</span></div>
-            <div class="progress-bar-bg">
-                <div class="progress-bar-fill" id="uploadProgressBar"></div>
+        <section class="upload-progress-container" id="uploadProgressContainer" aria-labelledby="uploadQueueTitle">
+            <div class="upload-queue-header">
+                <div>
+                    <h2 id="uploadQueueTitle">Uploads</h2>
+                    <p id="uploadQueueSummary" role="status" aria-live="polite"></p>
+                </div>
+                <div class="upload-queue-actions">
+                    <button class="btn" id="cancelUploadsBtn" onclick="cancelAllUploads()">Cancel all</button>
+                    <button class="btn" id="clearUploadsBtn" onclick="clearFinishedUploads()">Clear finished</button>
+                </div>
             </div>
-        </div>
+            <p class="upload-queue-hint">Keep this page open until uploads finish. A file already received may remain after cancellation.</p>
+            <ul class="upload-task-list" id="uploadTaskList"></ul>
+        </section>
 
         <div class="file-list-container">
             <div id="breadcrumb" class="breadcrumb" style="padding: 1rem; border-bottom: 1px solid var(--panel-border); font-weight: 500;">

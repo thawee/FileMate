@@ -268,9 +268,110 @@ h1 {
     flex-shrink: 0;
 }
 
-.upload-text {
-    font-size: 0.875rem;
-    margin-bottom: 0.5rem;
+.upload-queue-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+}
+
+.upload-queue-header h2 {
+    margin: 0;
+    font-size: 1rem;
+}
+
+.upload-queue-header p,
+.upload-queue-hint {
+    margin: 0.35rem 0;
+    color: var(--text-muted);
+    font-size: 0.8rem;
+}
+
+.upload-queue-actions {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+
+.upload-task-list {
+    list-style: none;
+    padding: 0;
+    margin: 0.75rem 0 0;
+    max-height: 250px;
+    overflow-y: auto;
+}
+
+.upload-task {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.75rem 0;
+    border-top: 1px solid var(--panel-border);
+}
+
+.upload-task-details {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+}
+
+.upload-task-name,
+.upload-task-destination,
+.upload-task-error {
+    overflow-wrap: anywhere;
+}
+
+.upload-task-name {
+    font-size: 0.9rem;
+}
+
+.upload-task-destination,
+.upload-task-status,
+.upload-task-error {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+}
+
+.upload-task progress {
+    width: 100%;
+    height: 8px;
+    accent-color: var(--primary-color);
+}
+
+.upload-task-succeeded .upload-task-status {
+    color: #22c55e;
+}
+
+.upload-task-error {
+    color: var(--danger-color);
+}
+
+.upload-task > .btn {
+    flex-shrink: 0;
+}
+
+.upload-progress-container .btn {
+    background: rgba(99, 102, 241, 0.16);
+    color: var(--text-color);
+    border: 1px solid var(--panel-border);
+    font-size: 0.8rem;
+    padding: 0.4rem 0.75rem;
+}
+
+.upload-progress-container .btn:hover:not(:disabled) {
+    background: rgba(99, 102, 241, 0.3);
+}
+
+.upload-progress-container .btn:disabled {
+    opacity: 0.45;
+    cursor: default;
+}
+
+.light-theme .upload-task-succeeded .upload-task-status {
+    color: #15803d;
 }
 
 /* EXIF Overlay */
