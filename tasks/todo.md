@@ -1,3 +1,15 @@
+# Protect Android storage during cleanup
+
+- [x] Inspect both cleanup traversals and storage statistics. Existing exact-name protection happens after recursion; junk deletion has no exclusion.
+- [x] Reproduce with isolated filesystem fixtures before implementing the fix.
+- [x] Add one shared Android-subtree policy before cleanup traversal; apply it to cleanup candidate counts without changing storage totals.
+- [x] Verify Android files and empty descendants survive while ordinary cleanup still works, including a root inside Android and similarly named AndroidBackup folders.
+- [x] Build, integrate, and verify updated APK on emulator and phone. Never run cleanup against actual user files during verification.
+
+Throughput checkpoint. One worker owns the helper and focused filesystem tests in an isolated worktree. Main owns task records, documentation, integration, and device verification. No signature or public API changes, architectural panel, PR publication, or release requested.
+
+Verified 35 unit tests, including six real filesystem cleanup cases. The five original cases failed before the guard and passed after it. APK build and emulator launch passed; Storage tab displays the exclusion. Updated emulator and Samsung phone with app data preserved. No cleanup ran against actual user storage.
+
 # ShareMate launcher refresh
 
 - [x] Pin the current icon contract. Preserve folder, wireless waves, Mate M, launcher resource names, and application ID.

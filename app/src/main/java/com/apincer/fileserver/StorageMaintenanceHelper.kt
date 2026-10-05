@@ -3,6 +3,7 @@ package com.apincer.fileserver
 import android.content.Context
 import android.media.MediaScannerConnection
 import java.io.File
+import java.io.IOException
 
 object StorageMaintenanceHelper {
 
@@ -40,7 +41,7 @@ object StorageMaintenanceHelper {
     }
 
     private fun cleanEmptyFoldersRecursive(dir: File, root: File, removedList: MutableList<String>, context: Context?): Boolean {
-        if (!dir.exists() || !dir.isDirectory) return false
+        if (!dir.exists() || !dir.isDirectory || isProtectedAndroidPath(dir)) return false
         val children = dir.listFiles() ?: emptyArray()
         var isEmpty = true
 
@@ -85,6 +86,13 @@ object StorageMaintenanceHelper {
                 name.startsWith("._")
     }
 
+    private fun isProtectedAndroidPath(file: File): Boolean = try {
+        file.toPath().toAbsolutePath().normalize().any { it.toString() == "Android" } ||
+                file.canonicalFile.toPath().any { it.toString() == "Android" }
+    } catch (_: IOException) {
+        true
+    }
+
     fun cleanJunkFiles(root: File, context: Context? = null): CleanJunkResult {
         var removedCount = 0
         var freedBytes = 0L
@@ -92,11 +100,12 @@ object StorageMaintenanceHelper {
         val rootNorm = root.toPath().toAbsolutePath().normalize().toString()
 
         fun scanAndCleanJunk(dir: File) {
+            if (isProtectedAndroidPath(dir)) return
             val children = dir.listFiles() ?: return
             for (child in children) {
                 if (child.isDirectory) {
                     scanAndCleanJunk(child)
-                } else if (child.isFile && isJunkFile(child)) {
+                } else if (child.isFile && isJunkFile(child) && !isProtectedAndroidPath(child)) {
                     val size = child.length()
                     val pathStr = child.absolutePath
                     val childNorm = child.toPath().toAbsolutePath().normalize().toString()
@@ -135,7 +144,7 @@ object StorageMaintenanceHelper {
 
         fun analyze(dir: File) {
             val children = dir.listFiles() ?: return
-            if (children.isEmpty() && dir != root) {
+            if (children.isEmpty() && dir != root && !isProtectedAndroidPath(dir)) {
                 val rootNorm = root.toPath().toAbsolutePath().normalize().toString()
                 val dirNorm = dir.toPath().toAbsolutePath().normalize().toString()
                 val relPath = dirNorm.removePrefix(rootNorm).trimStart('/', '\\').replace('\\', '/')
@@ -153,7 +162,7 @@ object StorageMaintenanceHelper {
                     val length = child.length()
                     totalSize += length
 
-                    if (isJunkFile(child)) junkFilesCount++
+                    if (isJunkFile(child) && !isProtectedAndroidPath(child)) junkFilesCount++
 
                     val ext = child.extension.lowercase()
                     when {

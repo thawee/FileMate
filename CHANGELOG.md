@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+- Skip the Android subtree in empty-folder and OS-junk cleanup, and exclude it from cleanup candidate counts.
+
 ## [2.3.0] - 2026-10-05
 
 - Rebrand File Mate as ShareMate while preserving the application ID and installed data.

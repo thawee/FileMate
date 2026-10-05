@@ -199,7 +199,7 @@ Guest and Android incoming-file copies write to a temporary `.sharemate-` file b
 
 Guest responses set `Cache-Control: no-store`, `Referrer-Policy: no-referrer`, `X-Content-Type-Options: nosniff`, and a restrictive content security policy. Raster images can display inline. Other downloads, including HTML, JavaScript, and SVG, use attachment disposition and a sandbox policy.
 
-ZIP extraction refuses an existing destination and publishes a completed extraction into a new folder. Storage cleanup remains a native tool. It has no owner web API. Junk cleanup permanently deletes matching files after confirmation, including backup and temporary filename patterns.
+ZIP extraction refuses an existing destination and publishes a completed extraction into a new folder. Storage cleanup remains a native tool. It has no owner web API. Both cleanup actions skip the Android subtree before recursion, including a selected root inside Android and paths that resolve into it. Cleanup candidate counts exclude Android content; storage totals still include it. Junk cleanup permanently deletes matching files elsewhere after confirmation, including backup and temporary filename patterns.
 
 Android share reception accepts `ACTION_SEND` and `ACTION_SEND_MULTIPLE` content URIs. It deduplicates the URIs and processes up to 200 files after the user chooses a destination. FileProvider supplies content URIs when the app launches external viewers.
 

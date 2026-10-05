@@ -1779,7 +1779,7 @@ fun ToolsAndProxyHubContent(
                                             color = Color.White
                                         )
                                         Text(
-                                            text = "Scans storage and purges ghost empty folders",
+                                            text = "Removes empty folders outside Android storage",
                                             style = MaterialTheme.typography.bodySmall,
                                             color = Color.LightGray
                                         )
@@ -1788,7 +1788,7 @@ fun ToolsAndProxyHubContent(
 
                                 Spacer(modifier = Modifier.height(12.dp))
                                 Text(
-                                    text = "Recursively searches user directories and safely removes leftover empty folders created by uninstalled apps (system and media root folders are strictly protected).",
+                                    text = "Removes empty folders in user storage. The Android folder and all its contents are skipped. Standard media root folders are kept.",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = Color.Gray
                                 )
@@ -1863,7 +1863,7 @@ fun ToolsAndProxyHubContent(
 
                                 Spacer(modifier = Modifier.height(12.dp))
                                 Text(
-                                    text = "Cleans hidden metadata files left behind from macOS, Windows, and temp transfers: .DS_Store, Thumbs.db, Desktop.ini, *.tmp, *.bak, and *~ backup files.",
+                                    text = "Removes .DS_Store, Thumbs.db, Desktop.ini, *.tmp, *.bak, and *~ files outside the Android folder.",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = Color.Gray
                                 )
@@ -2351,7 +2351,7 @@ fun ToolsAndProxyHubContent(
         AlertDialog(
             onDismissRequest = { showJunkConfirmation = false },
             title = { Text("Purge OS Junk Files?") },
-            text = { Text("This permanently deletes .DS_Store, Thumbs.db, Desktop.ini, *.tmp, *.bak, *~ and ._* files from the selected storage folder and its subfolders. Backup and temporary files may contain work you want to keep. This cannot be undone.") },
+            text = { Text("This permanently deletes .DS_Store, Thumbs.db, Desktop.ini, *.tmp, *.bak, *~ and ._* files from the selected storage folder and its subfolders. The Android folder and all its contents are skipped. Backup and temporary files may contain work you want to keep. This cannot be undone.") },
             confirmButton = {
                 Button(onClick = {
                     showJunkConfirmation = false
