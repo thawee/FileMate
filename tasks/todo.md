@@ -1,3 +1,14 @@
+# ShareMate launcher refresh
+
+- [x] Pin the current icon contract. Preserve folder, wireless waves, Mate M, launcher resource names, and application ID.
+- [x] Simplify adaptive artwork and provide a separate monochrome outline.
+- [x] Generate all legacy density icons from the same artwork and remove default robot assets.
+- [x] Build, inspect rendered launcher icons, install on emulator and phone, and verify launcher behavior.
+
+Throughput checkpoint. One generator owns vector and raster artwork so density exports cannot drift. No application logic, version change, or GitHub release is needed for this icon update.
+
+Verified debug build, raw color and monochrome previews, actual emulator launcher rendering, and successful emulator and Samsung phone updates. All ten PNG dimensions and five XML resources checked. No version or published release changed.
+
 # ShareMate 2.3.0 release
 
 - [x] Resolve the forge and destination. GitHub API with existing credential helper; thawee/FileMate main. GitHub CLI is unavailable. This is a versioned release, not a PR merge chain.

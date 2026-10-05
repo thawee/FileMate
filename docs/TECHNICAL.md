@@ -35,6 +35,12 @@ These commands run from the repository root:
 
 Version 2.3.0 uses Android version code 12. The GitHub preview APK comes from the debug build and uses the local Android debug signing key. The release build has no signing configuration and produces an unsigned APK. Updates require matching signing certificates.
 
+## Launcher artwork
+
+[generate-launcher-icons.swift](../tools/generate-launcher-icons.swift) defines the folder, wireless waves, and M artwork. It generates the adaptive foreground, a separate monochrome outline, and ten legacy PNG icons. The adaptive background is `ic_launcher_background.xml`.
+
+To regenerate on macOS, run `swift tools/generate-launcher-icons.swift`. Add `--preview /tmp/sharemate-icons` to export color and monochrome previews.
+
 ## Source structure
 
 The Android UI uses Jetpack Compose and Material 3. `FileServerService` owns the HTTP server, the proxy, and the in-memory guest share registry. Owner and guest browser interfaces use separate bundled assets.
