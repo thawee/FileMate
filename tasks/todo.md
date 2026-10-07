@@ -253,7 +253,9 @@ Verified final APK on Samsung phone. All 37 Android tests and 10 browser tests p
 - [x] Resolve the forge and dependency chain. GitHub CLI and Origin are absent. GitHub API and origin/main identify thawee/FileMate at d6512c9. Existing 2.3.0 release is a debug-signed prerelease.
 - [x] Verify independently. Release verifier returned PASS. Both builds, all 37 Android tests, and 10 browser tests pass. The exact 2.3.1 APK runs on the Samsung phone; six images display, selected ZIP downloads, and SVG scripts are blocked.
 - [x] Prepare the patch release. Version 2.3.1, code 13, changelog, README, and technical reference. Release APK signing certificate matches 2.3.0.
-- [ ] Publish the reviewed commit and version tag without rewriting history.
-- [ ] Publish the APK and SHA256SUMS.txt and confirm the downloaded bytes and release metadata.
+- [x] Publish the reviewed commit and version tag without rewriting history. main and v2.3.1 were pushed atomically at 32c3bcfc2403ba2f508526363a80cf00aa0bac96. Independent verifier returned PASS for this revision against v2.3.0.
+- [x] Publish the APK and SHA256SUMS.txt and confirm the downloaded bytes and release metadata. Published https://github.com/thawee/FileMate/releases/tag/v2.3.1 as a prerelease. Both public downloads match the local SHA-256 hashes.
 
 Throughput checkpoint. This is a versioned GitHub release, not a PR merge chain. PR topology, queue, and per-PR landing steps from Shipping are skipped because there are no PRs to land. Preserve the existing debug-signed preview/prerelease contract. The user explicitly authorized making a new release; no additional publication confirmation is needed.
+
+Release APK is 24,170,852 bytes, version 2.3.1/code 13, with SHA-256 c8680417f7926793cc85c877c8d8222d4d692a08e33e3d8b02278fc8a4f1ee39. Its signing certificate matches the 2.3.0 preview. Prove It Works used the exact APK's metadata, matching bundled browser code, phone runtime checks, real ZIP byte comparisons, and downloaded public assets. Phone updated with app data preserved. Build, 37 Android tests, and 10 browser tests pass. Publication evidence is /private/tmp/sharemate-2.3.1-release/publication.log.
