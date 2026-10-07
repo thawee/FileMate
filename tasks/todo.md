@@ -219,3 +219,41 @@ Validation for this investigation uses source inspection and the diff against ma
 - [x] **3. Verification & Build**
   - [x] 3.1 Run tests (`./gradlew testDebugUnitTest`).
   - [x] 3.2 Build APK (`./gradlew assembleDebug`).
+# Android and Web UI working review
+
+- [x] Route through the **how** skill. For motivation questions, also route through the **why** skill.
+- [x] Throughput checkpoint stays one line: `throughput checkpoint: n/a, read-only investigation`.
+- [x] Produce the `how`-shaped output (Overview / Key Concepts / How It Works / Where Things Live / Gotchas), or a recommendation with a tradeoffs table if the request is a decision between alternatives.
+- [x] Apply the **unslop** skill to the reply.
+
+Review scope. Assess the current Android app and owner/guest Web UI without changing application code. Inspect integration and comments, run unit and browser checks, and drive core flows against the Android server. Report verified behavior and defects with file references. No release or PR requested.
+
+- [x] Inspect Android behavior and backend/frontend contracts independently.
+- [x] Run Android tests/build and browser tests.
+- [x] Verify Android launch and real HTTP/Web UI flows on an available emulator.
+- [x] Record findings and verification limits.
+
+# Fix Web UI grid images and selected ZIP download
+
+- [x] Reproduce it yourself on the matching surface via the driver skill (Non-negotiables), even when a debug or instrumentation protocol says to ask the user to reproduce. Ask the user only with a stated, specific reason the control surface cannot reach the target, and only after driving it as far as it goes. If it won't reproduce directly, synthesize the trigger, tighten conditions, or instrument until it fires.
+- [x] Binary-search the cause. Form the candidate hypotheses, then rule them out until one survives. Seed them with `how` over the affected subsystem and the **why** skill for regression history. Each pass, take the split that cuts the most remaining problem space, get runtime evidence, eliminate. When program state is unclear, add instrumentation or logging and read it as the code runs. Don't guess. Drive a long or stubborn hunt with Claude Code's `loop` skill. Confirm the surviving *mechanism* with runtime evidence before the step-3 architect/interrogate fan-out.
+- [x] Plan the fix. If it crosses a function boundary, `architect` first. Delegate implementation to a subagent using your configured bug-fix model (default in poteto-mode's Models section) with a specific scope.
+- [x] Verify on the same surface. The original repro now passes. "Inconclusive" or wrong-surface is not a pass. Flag it. Unit tests show branch behavior, not bug absence.
+- [x] Stage the commits so the failing repro lands before the fix in git history. See the **tdd** skill for the failing-test-first cadence when the bug has a cheap local test path. Skip it when the test would be expensive, integration-heavy, or unclear.
+  skip: preserve the fix and regression checks in the working tree; no commit requested.
+- [x] Run **Opening a PR**.
+  skip: no PR publication requested.
+
+Throughput checkpoint. Frontend selection and backend image delivery investigations are independent. Main owns phone/browser reproduction, integration, and final device checks. Use disposable fixtures and preserve personal files.
+
+Verified final APK on Samsung phone. All 37 Android tests and 10 browser tests pass. All six image fixtures load. Actual selected ZIP contains exactly two original images. SVG scripts are blocked. See tasks/webui-grid-zip-fix.md for reproduction and evidence. Existing signatures and ownership retained; no architecture rewrite or PR publication.
+
+# ShareMate 2.3.1 release
+
+- [x] Resolve the forge and dependency chain. GitHub CLI and Origin are absent. GitHub API and origin/main identify thawee/FileMate at d6512c9. Existing 2.3.0 release is a debug-signed prerelease.
+- [x] Verify independently. Release verifier returned PASS. Both builds, all 37 Android tests, and 10 browser tests pass. The exact 2.3.1 APK runs on the Samsung phone; six images display, selected ZIP downloads, and SVG scripts are blocked.
+- [x] Prepare the patch release. Version 2.3.1, code 13, changelog, README, and technical reference. Release APK signing certificate matches 2.3.0.
+- [ ] Publish the reviewed commit and version tag without rewriting history.
+- [ ] Publish the APK and SHA256SUMS.txt and confirm the downloaded bytes and release metadata.
+
+Throughput checkpoint. This is a versioned GitHub release, not a PR merge chain. PR topology, queue, and per-PR landing steps from Shipping are skipped because there are no PRs to land. Preserve the existing debug-signed preview/prerelease contract. The user explicitly authorized making a new release; no additional publication confirmation is needed.

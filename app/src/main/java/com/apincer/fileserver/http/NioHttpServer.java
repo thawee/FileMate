@@ -1866,7 +1866,12 @@ public class NioHttpServer implements Runnable {
                         currentCount + "/" + maxConcurrentStreams + ")");
             }
 
-            this.addHeader("Content-Type", MimeTypeUtil.readContentForMime(file));
+            String mimeType = MimeTypeUtil.readContentForMime(file);
+            this.addHeader("Content-Type", mimeType);
+            if ("image/svg+xml".equals(MimeTypeUtil.getMimeType(file.getName()))) {
+                this.addHeader("Content-Security-Policy", "sandbox; default-src 'none'; frame-ancestors 'none'");
+                this.addHeader("X-Content-Type-Options", "nosniff");
+            }
 
             String etag = generateETag(file);
             this.addHeader("ETag", etag);
@@ -2100,6 +2105,9 @@ public class NioHttpServer implements Runnable {
             MIME_MAP.put("png", "image/png");
             MIME_MAP.put("gif", "image/gif");
             MIME_MAP.put("webp", "image/webp");
+            MIME_MAP.put("svg", "image/svg+xml");
+            MIME_MAP.put("bmp", "image/bmp");
+            MIME_MAP.put("ico", "image/x-icon");
 
             // Text
             MIME_MAP.put("txt", "text/plain");

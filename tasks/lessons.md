@@ -45,3 +45,7 @@
 10. **Strict Isolation of API Routes in Single Page Application (SPA) Fallback**:
     - **Pattern**: An SPA router fallback returning `index.html` on unmatched routes (to support client-side reload on subpaths) can catch API requests (`/api/files`, `/api/system`) if incoming paths contain absolute URLs (from HTTP proxies), subpath prefixes, or trailing slashes, causing the client `fetch()` to receive `<!DOCTYPE html>` instead of JSON.
     - **Rule**: Always normalize `HttpRequest.path` by stripping scheme/host prefixes (`http://...`), match API routes using robust suffix matching (`path.endsWith("/api/files")`), and strictly guard the SPA HTML fallback with `if (path.contains("/api/")) notFound()`.
+
+- When the user identifies a connected device by Wi-Fi ADB address, use that exact serial for physical-device checks. Keep emulator checks as separate evidence and do not infer phone behavior from them.
+
+- A successful owner-page render does not verify grid image fallback or multi-selection downloads. When reviewing the owner Web UI, select files through its real controls, inspect the downloaded ZIP, and force a thumbnail miss with a filename containing an apostrophe. Count selected files independently of mirrored list and grid checkboxes.

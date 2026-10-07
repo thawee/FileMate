@@ -6,6 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+## [2.3.1] - 2026-10-07
+
+- Fix selected-image ZIP downloads by counting each selected file once across list and grid views.
+- Preserve literal filenames and synchronize selections correctly when names contain apostrophes or quotes.
+- Fix original-image fallback when thumbnails are unavailable and filenames contain apostrophes.
+- Serve SVG, BMP, and ICO with image MIME types. Sandbox SVG file responses to block embedded scripts.
+- Refresh launcher artwork and provide a separate monochrome icon for themed launchers.
 - Skip the Android subtree in empty-folder and OS-junk cleanup, and exclude it from cleanup candidate counts.
 
 ## [2.3.0] - 2026-10-05

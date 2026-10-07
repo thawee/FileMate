@@ -965,13 +965,13 @@ function handleCheckboxClick(event, checkbox) {
             const idx = parseInt(cb.dataset.index, 10);
             if (idx >= start && idx <= end) {
                 cb.checked = targetState;
-                const otherSelector = isGrid ? `.item-checkbox:not(.grid-checkbox)[data-name="${cb.dataset.name}"]` : `.grid-checkbox[data-name="${cb.dataset.name}"]`;
+                const otherSelector = isGrid ? `.item-checkbox:not(.grid-checkbox)[data-index="${idx}"]` : `.grid-checkbox[data-index="${idx}"]`;
                 const otherCb = document.querySelector(otherSelector);
                 if (otherCb) otherCb.checked = targetState;
             }
         });
     } else {
-        const otherSelector = isGrid ? `.item-checkbox:not(.grid-checkbox)[data-name="${checkbox.dataset.name}"]` : `.grid-checkbox[data-name="${checkbox.dataset.name}"]`;
+        const otherSelector = isGrid ? `.item-checkbox:not(.grid-checkbox)[data-index="${currentIndex}"]` : `.grid-checkbox[data-index="${currentIndex}"]`;
         const otherCb = document.querySelector(otherSelector);
         if (otherCb) otherCb.checked = checkbox.checked;
     }
@@ -1034,9 +1034,13 @@ function hideContextMenu() {
 function getSelectedFiles() {
     const checkboxes = document.querySelectorAll('.item-checkbox:checked');
     const files = [];
+    const selectedNames = new Set();
     checkboxes.forEach(cb => {
+        const name = cb.getAttribute('data-name');
+        if (selectedNames.has(name)) return;
+        selectedNames.add(name);
         files.push({
-            name: cb.getAttribute('data-name'),
+            name,
             isDir: cb.getAttribute('data-is-dir') === 'true'
         });
     });
@@ -1543,6 +1547,7 @@ function renderFiles(files) {
         const isZip = file.name.match(/\.zip$/i);
         const isMedia = isImage || file.name.match(/\.(mp4|webm|mkv|mov|avi|mp3|wav|ogg|m4a|flac|aac|opus|pdf|txt|json|md|js|py|html|css|kt|java)$/i);
         const escapedName = escapeJsArg(file.name);
+        const attributeName = escapeHtml(file.name).replace(/"/g, '&quot;');
 
         const isProtected = file.isDirectory && currentPath === "" && new Set([
             "Android", "DCIM", "Pictures", "Movies", "Music", "Download", "Documents",
@@ -1550,7 +1555,7 @@ function renderFiles(files) {
         ]).has(file.name);
 
         const iconHtml = isImage 
-            ? `<img src="${thumbUrl}" class="file-thumbnail" alt="${escapeHtml(file.name)}" loading="lazy" onerror="this.onerror=null; this.src='${fileUrl}';" />`
+            ? `<img src="${thumbUrl}" class="file-thumbnail" alt="${attributeName}" loading="lazy" data-full-src="${escapeHtml(fileUrl).replace(/"/g, '&quot;')}" onerror="this.onerror=null; this.src=this.dataset.fullSrc;" />`
             : getFileTypeSvg(file, false);
 
         if (tbody) {
@@ -1561,7 +1566,7 @@ function renderFiles(files) {
             };
 
             const checkboxHtml = isProtected ? `<td style="text-align: center;"></td>` : `<td style="text-align: center;" onclick="event.stopPropagation();">
-                <input type="checkbox" class="custom-checkbox item-checkbox" data-index="${index}" data-name="${escapedName}" data-is-dir="${file.isDirectory}" onclick="handleCheckboxClick(event, this)" />
+                <input type="checkbox" class="custom-checkbox item-checkbox" data-index="${index}" data-name="${attributeName}" data-is-dir="${file.isDirectory}" onclick="handleCheckboxClick(event, this)" />
             </td>`;
 
             if (file.isDirectory) {
@@ -1630,10 +1635,10 @@ function renderFiles(files) {
             };
 
             const previewContent = isImage 
-                ? `<img src="${thumbUrl}" alt="${escapeHtml(file.name)}" loading="lazy" onerror="this.onerror=null; this.src='${fileUrl}';" />`
+                ? `<img src="${thumbUrl}" alt="${attributeName}" loading="lazy" data-full-src="${escapeHtml(fileUrl).replace(/"/g, '&quot;')}" onerror="this.onerror=null; this.src=this.dataset.fullSrc;" />`
                 : getFileTypeSvg(file, true);
 
-            const gridCheckbox = isProtected ? '' : `<input type="checkbox" class="custom-checkbox item-checkbox grid-checkbox" data-index="${index}" data-name="${escapedName}" data-is-dir="${file.isDirectory}" onclick="event.stopPropagation(); handleCheckboxClick(event, this);" />`;
+            const gridCheckbox = isProtected ? '' : `<input type="checkbox" class="custom-checkbox item-checkbox grid-checkbox" data-index="${index}" data-name="${attributeName}" data-is-dir="${file.isDirectory}" onclick="event.stopPropagation(); handleCheckboxClick(event, this);" />`;
 
             if (file.isDirectory) {
                 card.innerHTML = `

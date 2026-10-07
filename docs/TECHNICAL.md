@@ -29,11 +29,11 @@ These commands run from the repository root:
 | `./gradlew :app:installDebug` | Debug app installed on a connected device or emulator |
 | `./gradlew :app:assembleDebugAndroidTest` | Instrumented test APK |
 | `./gradlew :app:connectedDebugAndroidTest` | Instrumented tests on connected devices or emulators |
-| `node --test tools/verify/browser-upload-queue.test.cjs` | Browser upload queue tests |
+| `node --test tools/verify/browser-*.test.cjs` | Browser upload queue, selection, and image fallback tests |
 
 ## Release artifacts
 
-Version 2.3.0 uses Android version code 12. The GitHub preview APK comes from the debug build and uses the local Android debug signing key. The release build has no signing configuration and produces an unsigned APK. Updates require matching signing certificates.
+Version 2.3.1 uses Android version code 13. The GitHub preview APK comes from the debug build and uses the local Android debug signing key. The release build has no signing configuration and produces an unsigned APK. Updates require matching signing certificates.
 
 ## Launcher artwork
 
@@ -217,7 +217,7 @@ A TV browser can open a guest photo folder and use the browser slideshow. The cu
 
 ## Verification tools
 
-Local JVM tests live in [app/src/test/](../app/src/test/). They cover request body assembly, share scopes, authentication routes, filenames, ZIP extraction, directory state, image naming, and network address selection. [Browser upload queue tests](../tools/verify/browser-upload-queue.test.cjs) use Node's built-in test runner.
+Local JVM tests live in [app/src/test/](../app/src/test/). They cover request body assembly, share scopes, authentication routes, filenames, ZIP extraction, directory state, image naming and MIME types, and network address selection. [Browser upload queue tests](../tools/verify/browser-upload-queue.test.cjs) and [grid selection and image fallback tests](../tools/verify/browser-file-grid.test.cjs) use Node's built-in test runner.
 
 The [IncomingFilesInstrumentedTest](../app/src/androidTest/java/com/apincer/fileserver/sharing/IncomingFilesInstrumentedTest.kt) exercises Android content URI copies, filename conflicts, and failed reads. After installation of both APKs, its direct runner command is:
 
