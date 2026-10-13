@@ -65,6 +65,10 @@ class FileServerService : Service() {
         private val MUTATING_ROUTES = setOf(
             "/api/upload", "/api/delete", "/api/move", "/api/rename", "/api/mkdir", "/api/unzip"
         )
+        // Largest body buffered for an authenticated upload; everything else is capped small
+        // so unauthenticated peers cannot exhaust memory with oversized request bodies.
+        private const val MAX_UPLOAD_BODY = 500 * 1024 * 1024
+        private const val SMALL_BODY_LIMIT = 1 * 1024 * 1024
     }
 
     @Volatile
@@ -190,6 +194,19 @@ class FileServerService : Service() {
             server.setTcpNoDelay(true)
             server.setMaxRequestSize(500 * 1024 * 1024) // 500MB upload limit
             server.setOnReady { if (nioServer === server && server.isRunning) isRunning = true }
+
+            // DoS guard: only an authenticated upload may stream a large body into memory.
+            // Every other request (including any unauthenticated POST) is capped small, so a
+            // flood of oversized bodies cannot exhaust the heap before the handler runs auth.
+            server.setPreBodyCheck(NioHttpServer.PreBodyCheck { request ->
+                val target = try { NioHttpServer.splitRequestTarget(request.path ?: "/") }
+                    catch (_: IllegalArgumentException) { return@PreBodyCheck SMALL_BODY_LIMIT }
+                val reqPath = target[0]
+                val reqQuery = target[1]
+                val authed = try { OwnerRoutePolicy.authenticated(request, reqQuery, AuthHelper.currentPin.value) }
+                    catch (_: Exception) { false }
+                if (authed && reqPath == "/api/upload") MAX_UPLOAD_BODY else SMALL_BODY_LIMIT
+            })
 
             server.registerHttpHandler(NioHttpServer.Handler { request ->
                 handleRoute(request)

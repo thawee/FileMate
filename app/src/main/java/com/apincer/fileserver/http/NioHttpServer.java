@@ -391,6 +391,7 @@ public class NioHttpServer implements Runnable {
     private long keepAliveTimeout = 30000; // 30 seconds for music streaming
     private long lastTimeoutCheck = 0;
     private int maxRequestSize = 2 * 1024 * 1024; // 2MB for requests (not file size)
+    private volatile PreBodyCheck preBodyCheck; // decides per-request max body before buffering
     private int maxWebSocketFrameSize = 1024 * 1024; // 1MB max WebSocket frame
     private long selectorTimeout = 1000; // Milliseconds
     private int maxConcurrentStreams = Runtime.getRuntime().availableProcessors() * 2; // 2× CPU cores
@@ -413,6 +414,19 @@ public class NioHttpServer implements Runnable {
 
     public void setMaxRequestSize(int maxRequestSize) {
         this.maxRequestSize = maxRequestSize;
+    }
+
+    /**
+     * Decides, from the already-parsed request headers, the largest body this request may send
+     * before the body is read into memory. Lets the application refuse a large body from an
+     * unauthenticated peer instead of buffering it and only rejecting afterwards (DoS guard).
+     */
+    public interface PreBodyCheck {
+        int maxBodyBytes(HttpRequest request);
+    }
+
+    public void setPreBodyCheck(PreBodyCheck preBodyCheck) {
+        this.preBodyCheck = preBodyCheck;
     }
 
     public void setMaxWebSocketFrameSize(int maxWebSocketFrameSize) {
@@ -847,7 +861,12 @@ public class NioHttpServer implements Runnable {
                     try {
                         if (!lengthHeader.matches("[0-9]+")) throw new NumberFormatException();
                         long length = Long.parseLong(lengthHeader);
-                        int limit = guest ? 20 * 1024 * 1024 : maxRequestSize;
+                        // Cap the body BEFORE buffering it. Guests get a fixed 20MB; other
+                        // requests are sized by the application's pre-body check (which refuses
+                        // a large body from an unauthenticated peer) so a flood of oversized
+                        // uploads cannot exhaust memory ahead of the auth check in the handler.
+                        PreBodyCheck gate = preBodyCheck;
+                        int limit = guest ? 20 * 1024 * 1024 : (gate != null ? gate.maxBodyBytes(request) : maxRequestSize);
                         if (length > limit) errorStatus = HTTP_PAYLOAD_TOO_LARGE;
                         else contentLength = (int) length;
                     } catch (NumberFormatException invalid) { errorStatus = HTTP_BAD_REQUEST; }
