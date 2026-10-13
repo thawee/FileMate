@@ -341,6 +341,9 @@ class FileServerService : Service() {
             "img-src 'self' data: blob:; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'")
         .addHeader("X-Content-Type-Options", "nosniff")
         .addHeader("X-Frame-Options", "DENY")
+        // The owner authenticates with ?pin= on some requests; no-referrer stops that query
+        // string leaking to any origin via the Referer header on subrequests/navigations.
+        .addHeader("Referrer-Policy", "no-referrer")
         .setBody(body)
 
     private fun cssResponse(body: ByteArray) = NioHttpServer.HttpResponse()
