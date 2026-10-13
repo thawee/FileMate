@@ -519,7 +519,7 @@ async function openPreview(fileName, fileUrl) {
                     container.style.lineHeight = '1.6';
                     container.style.maxWidth = '800px';
                     container.style.margin = '0 auto';
-                    container.innerHTML = marked.parse(text);
+                    container.innerHTML = DOMPurify.sanitize(marked.parse(text));
                     body.innerHTML = '';
                     body.appendChild(container);
                 } else {
@@ -920,7 +920,7 @@ async function confirmRename() {
         return;
     }
     try {
-        const resp = await authenticatedFetch(`/api/rename?path=${encodeURIComponent(currentPath)}&oldName=${encodeURIComponent(renamingTargetName)}&newName=${encodeURIComponent(newName)}`);
+        const resp = await authenticatedFetch(`/api/rename?path=${encodeURIComponent(currentPath)}&oldName=${encodeURIComponent(renamingTargetName)}&newName=${encodeURIComponent(newName)}`, { method: 'POST' });
         if (!resp.ok) {
             const err = await resp.text();
             throw new Error(err || 'Failed to rename');

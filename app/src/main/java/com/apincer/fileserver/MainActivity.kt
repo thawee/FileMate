@@ -1415,9 +1415,11 @@ fun ToolsAndProxyHubContent(
             when (selectedTab) {
                 0 -> {
                     // TAB 0: HTTP PROXY SUITE
-                    val proxyUrl = "http://$primaryIp:8081"
-                    val exportSnippet = "export http_proxy=\"http://$primaryIp:8081\"\nexport https_proxy=\"http://$primaryIp:8081\""
-                    val curlSnippet = "curl -x http://$primaryIp:8081 https://icanhazip.com"
+                    // The proxy requires the owner PIN (admin:<pin>), and the PIN rotates each
+                    // time the server starts, so snippets must embed the current credentials.
+                    val proxyUrl = "http://admin:$currentPin@$primaryIp:8081"
+                    val exportSnippet = "export http_proxy=\"http://admin:$currentPin@$primaryIp:8081\"\nexport https_proxy=\"http://admin:$currentPin@$primaryIp:8081\""
+                    val curlSnippet = "curl -x http://admin:$currentPin@$primaryIp:8081 https://icanhazip.com"
 
                     Column(
                         modifier = Modifier.fillMaxWidth(),
@@ -1642,10 +1644,11 @@ fun ToolsAndProxyHubContent(
                                 Spacer(modifier = Modifier.height(10.dp))
 
                                 val guides = listOf(
-                                    Pair("iOS / iPadOS", "Settings → Wi-Fi → Tap (i) on network → Configure Proxy → Manual\n• Server: $primaryIp\n• Port: 8081"),
-                                    Pair("Android", "Settings → Wi-Fi → Tap network gear/pencil → Advanced → Proxy: Manual\n• Proxy hostname: $primaryIp\n• Proxy port: 8081"),
-                                    Pair("macOS", "System Settings → Network → Wi-Fi → Details → Proxies\n• Turn on 'Web Proxy (HTTP)' and 'Secure Web Proxy (HTTPS)'\n• Server: $primaryIp, Port: 8081"),
-                                    Pair("Windows 10 / 11", "Settings → Network & Internet → Proxy\n• Manual proxy setup → Turn on 'Use a proxy server'\n• IP: $primaryIp, Port: 8081")
+                                    Pair("Authentication", "This proxy requires sign-in with the owner PIN.\n• Username: admin\n• Password: $currentPin (the current PIN)\n• The PIN changes every time the server restarts — re-enter it after a restart.\n• Only external hosts are reachable; the device and private LAN addresses are blocked."),
+                                    Pair("iOS / iPadOS", "Settings → Wi-Fi → Tap (i) on network → Configure Proxy → Manual\n• Server: $primaryIp\n• Port: 8081\n• Authentication: On → Username admin, Password $currentPin"),
+                                    Pair("Android", "Settings → Wi-Fi → Tap network gear/pencil → Advanced → Proxy: Manual\n• Proxy hostname: $primaryIp\n• Proxy port: 8081\n• (Android Wi-Fi proxy has no credential fields — use an app/CLI that supports admin:$currentPin, e.g. the snippets above)"),
+                                    Pair("macOS", "System Settings → Network → Wi-Fi → Details → Proxies\n• Turn on 'Web Proxy (HTTP)' and 'Secure Web Proxy (HTTPS)'\n• Server: $primaryIp, Port: 8081\n• Turn on 'Proxy server requires password' → Username admin, Password $currentPin"),
+                                    Pair("Windows 10 / 11", "Settings → Network & Internet → Proxy\n• Manual proxy setup → Turn on 'Use a proxy server'\n• IP: $primaryIp, Port: 8081\n• Windows will prompt for credentials: Username admin, Password $currentPin")
                                 )
 
                                 guides.forEachIndexed { idx, (os, steps) ->

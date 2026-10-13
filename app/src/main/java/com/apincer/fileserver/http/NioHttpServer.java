@@ -391,6 +391,12 @@ public class NioHttpServer implements Runnable {
     private long keepAliveTimeout = 30000; // 30 seconds for music streaming
     private long lastTimeoutCheck = 0;
     private int maxRequestSize = 2 * 1024 * 1024; // 2MB for requests (not file size)
+    private volatile PreBodyCheck preBodyCheck; // decides per-request max body before buffering
+    private static final int MAX_HEADER_BYTES = 64 * 1024; // cap request-header buffering (DoS guard)
+    // Total bytes currently being buffered for unauthenticated guest (/share) uploads, and the
+    // ceiling across all connections. Bounds guest upload memory regardless of connection count.
+    private final java.util.concurrent.atomic.AtomicLong pendingBodyBytes = new java.util.concurrent.atomic.AtomicLong();
+    private static final long GUEST_BODY_BUDGET = 64L * 1024 * 1024;
     private int maxWebSocketFrameSize = 1024 * 1024; // 1MB max WebSocket frame
     private long selectorTimeout = 1000; // Milliseconds
     private int maxConcurrentStreams = Runtime.getRuntime().availableProcessors() * 2; // 2× CPU cores
@@ -413,6 +419,19 @@ public class NioHttpServer implements Runnable {
 
     public void setMaxRequestSize(int maxRequestSize) {
         this.maxRequestSize = maxRequestSize;
+    }
+
+    /**
+     * Decides, from the already-parsed request headers, the largest body this request may send
+     * before the body is read into memory. Lets the application refuse a large body from an
+     * unauthenticated peer instead of buffering it and only rejecting afterwards (DoS guard).
+     */
+    public interface PreBodyCheck {
+        int maxBodyBytes(HttpRequest request);
+    }
+
+    public void setPreBodyCheck(PreBodyCheck preBodyCheck) {
+        this.preBodyCheck = preBodyCheck;
     }
 
     public void setMaxWebSocketFrameSize(int maxWebSocketFrameSize) {
@@ -847,7 +866,12 @@ public class NioHttpServer implements Runnable {
                     try {
                         if (!lengthHeader.matches("[0-9]+")) throw new NumberFormatException();
                         long length = Long.parseLong(lengthHeader);
-                        int limit = guest ? 20 * 1024 * 1024 : maxRequestSize;
+                        // Cap the body BEFORE buffering it. Guests get a fixed 20MB; other
+                        // requests are sized by the application's pre-body check (which refuses
+                        // a large body from an unauthenticated peer) so a flood of oversized
+                        // uploads cannot exhaust memory ahead of the auth check in the handler.
+                        PreBodyCheck gate = preBodyCheck;
+                        int limit = guest ? 20 * 1024 * 1024 : (gate != null ? gate.maxBodyBytes(request) : maxRequestSize);
                         if (length > limit) errorStatus = HTTP_PAYLOAD_TOO_LARGE;
                         else contentLength = (int) length;
                     } catch (NumberFormatException invalid) { errorStatus = HTTP_BAD_REQUEST; }
@@ -865,6 +889,22 @@ public class NioHttpServer implements Runnable {
                 attachment.request = request;
                 attachment.wsUpgradeHeaderEnd = headerEnd; // Save before worker recycles the request
 
+                // Reserve guest-upload bytes against the shared budget so a flood of concurrent
+                // /share uploads cannot exhaust memory (released in ConnectionAttachment.reset()).
+                if (guest && contentLength > 0) {
+                    if (pendingBodyBytes.addAndGet(contentLength) > GUEST_BODY_BUDGET) {
+                        pendingBodyBytes.addAndGet(-contentLength);
+                        attachment.response = new HttpResponse()
+                                .setStatus(503, "Service Unavailable")
+                                .addHeader("Retry-After", "5")
+                                .addHeader("Connection", "close")
+                                .setBody("Server busy, retry shortly".getBytes(StandardCharsets.UTF_8));
+                        key.interestOps(SelectionKey.OP_WRITE);
+                        return;
+                    }
+                    attachment.reservedBodyBytes = contentLength;
+                }
+
                 if (request.getBody().length >= contentLength) {
                     key.interestOps(0);
                     if (workerPool == null || workerPool.isShutdown()) {
@@ -875,6 +915,12 @@ public class NioHttpServer implements Runnable {
                 } else {
                     attachment.state = ConnectionAttachment.ParseState.READING_BODY;
                 }
+            } else if (attachment.requestData.size() > MAX_HEADER_BYTES) {
+                // Headers still not terminated after MAX_HEADER_BYTES. A peer that streams data
+                // without ever sending the blank line could otherwise grow this buffer without
+                // bound (and each read re-scans it). Drop the connection.
+                closeConnection(key);
+                return;
             }
             //} else if (attachment.state == ConnectionAttachment.ParseState.READING_BODY) {
         } else if (currentState == ConnectionAttachment.ParseState.READING_BODY) {
@@ -1363,6 +1409,8 @@ public class NioHttpServer implements Runnable {
         ByteBuffer pendingWriteBuffer = null;
         private final Object stateLock = new Object();
         private long bodyReadStartTime = 0;
+        // Bytes this connection reserved against the shared guest-body budget (released on reset).
+        int reservedBodyBytes = 0;
         public static final long BODY_READ_TIMEOUT = 30_000; // 30 seconds
         // Set when a WebSocket CLOSE frame is received; triggers proper closeConnection()
         // after the current parse cycle finishes, ensuring activeConnections is decremented.
@@ -1390,6 +1438,11 @@ public class NioHttpServer implements Runnable {
         }
 
         public void reset() {
+            // Release any reserved guest-body budget first (idempotent: zeroed after release).
+            if (reservedBodyBytes > 0) {
+                pendingBodyBytes.addAndGet(-reservedBodyBytes);
+                reservedBodyBytes = 0;
+            }
             // HTTP cleanup
             if (requestData != null) {
                 try {

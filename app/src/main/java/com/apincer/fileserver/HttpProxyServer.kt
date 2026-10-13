@@ -10,6 +10,7 @@ import java.net.InetAddress
 import java.net.InetSocketAddress
 import java.net.URI
 import java.net.UnknownHostException
+import java.util.Base64
 
 class HttpProxyServer(private val port: Int) {
     private var serverSocket: ServerSocket? = null
@@ -78,12 +79,40 @@ class HttpProxyServer(private val port: Int) {
             val method = parts[0]
             val url = parts[1]
 
+            val clientIp = clientSocket.inetAddress?.hostAddress ?: ""
+            // The proxy shares the owner PIN with the web UI, so brute force here must hit the
+            // same lockout. Refuse early when the IP is already locked out.
+            if (AuthThrottle.retryAfterMs(clientIp) > 0) {
+                clientOut.write("HTTP/1.1 429 Too Many Requests\r\nContent-Length: 0\r\nConnection: close\r\n\r\n".toByteArray())
+                clientOut.flush()
+                return@withContext
+            }
+
+            val headers = parseHeaders(request, firstLineEnd, headersEndIndex)
+            if (!isProxyAuthorized(headers)) {
+                // Only a wrong credential counts as a brute-force attempt. The credential-less
+                // first request (the normal 407 challenge handshake, which browsers/curl always
+                // send, and which credential-incapable clients retry) must not self-lock the IP.
+                if (headers.containsKey("proxy-authorization")) AuthThrottle.recordFailure(clientIp)
+                clientOut.write(("HTTP/1.1 407 Proxy Authentication Required\r\n" +
+                        "Proxy-Authenticate: Basic realm=\"ShareMate\"\r\n" +
+                        "Content-Length: 0\r\nConnection: close\r\n\r\n").toByteArray())
+                clientOut.flush()
+                return@withContext
+            }
+            AuthThrottle.recordSuccess(clientIp)
+
             if (method.equals("CONNECT", ignoreCase = true)) {
                 val hostPort = url.split(":")
                 val host = hostPort[0]
                 val port = if (hostPort.size > 1) hostPort[1].toInt() else 443
 
                 val addr = resolveIPv4(host) ?: throw UnknownHostException("Cannot resolve: $host")
+                if (isBlockedDestination(addr)) {
+                    clientOut.write("HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\nConnection: close\r\n\r\n".toByteArray())
+                    clientOut.flush()
+                    return@withContext
+                }
                 remoteSocket = Socket()
                 remoteSocket.connect(InetSocketAddress(addr, port), CONNECT_TIMEOUT_MS)
                 remoteSocket.soTimeout = SO_TIMEOUT_MS
@@ -97,6 +126,11 @@ class HttpProxyServer(private val port: Int) {
                 val port = if (uri.port != -1) uri.port else 80
 
                 val addr = resolveIPv4(host) ?: throw UnknownHostException("Cannot resolve: $host")
+                if (isBlockedDestination(addr)) {
+                    clientOut.write("HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\nConnection: close\r\n\r\n".toByteArray())
+                    clientOut.flush()
+                    return@withContext
+                }
                 remoteSocket = Socket()
                 remoteSocket.connect(InetSocketAddress(addr, port), CONNECT_TIMEOUT_MS)
                 remoteSocket.soTimeout = SO_TIMEOUT_MS
@@ -111,7 +145,9 @@ class HttpProxyServer(private val port: Int) {
                 val remainingHeadersStart = firstLineEnd + 2
                 val lines = request.substring(remainingHeadersStart, headersEndIndex).split("\r\n")
                 for (line in lines) {
-                    if (line.isNotEmpty() && !line.startsWith("Proxy-Connection:", ignoreCase = true)) {
+                    if (line.isNotEmpty() &&
+                        !line.startsWith("Proxy-Connection:", ignoreCase = true) &&
+                        !line.startsWith("Proxy-Authorization:", ignoreCase = true)) {
                         remoteOut.write((line + "\r\n").toByteArray())
                     }
                 }
@@ -150,14 +186,49 @@ class HttpProxyServer(private val port: Int) {
         }
     }
 
+    private fun parseHeaders(request: String, firstLineEnd: Int, headersEndIndex: Int): Map<String, String> {
+        val map = HashMap<String, String>()
+        val start = firstLineEnd + 2
+        if (start >= headersEndIndex) return map
+        for (line in request.substring(start, headersEndIndex).split("\r\n")) {
+            val idx = line.indexOf(':')
+            if (idx > 0) map[line.substring(0, idx).trim().lowercase()] = line.substring(idx + 1).trim()
+        }
+        return map
+    }
+
+    // The proxy is reachable by every host on the LAN. Require the owner PIN so it cannot be
+    // abused as an open relay, and refuse to connect to the device itself or to internal
+    // networks so it cannot be used for SSRF / internal pivoting.
+    private fun isProxyAuthorized(headers: Map<String, String>): Boolean {
+        val provided = headers["proxy-authorization"] ?: return false
+        val expected = "Basic " + Base64.getEncoder().encodeToString("admin:${AuthHelper.currentPin.value}".toByteArray())
+        return java.security.MessageDigest.isEqual(provided.toByteArray(), expected.toByteArray())
+    }
+
+    private fun isBlockedDestination(addr: InetAddress): Boolean {
+        if (addr.isLoopbackAddress || addr.isAnyLocalAddress || addr.isLinkLocalAddress ||
+            addr.isSiteLocalAddress || addr.isMulticastAddress) return true
+        val b = addr.address
+        // Only IPv4 is allowed through (see resolveIPv4). Block ranges the standard predicates
+        // miss: 0.0.0.0/8 and CGNAT 100.64.0.0/10.
+        if (b.size == 4) {
+            val o0 = b[0].toInt() and 0xFF
+            val o1 = b[1].toInt() and 0xFF
+            if (o0 == 0) return true
+            if (o0 == 100 && o1 in 64..127) return true
+            return false
+        }
+        // Not IPv4 (e.g. IPv6 ULA fc00::/7, which isSiteLocalAddress does not cover): block.
+        return true
+    }
+
+    /** Resolve to an IPv4 address only; return null if the host has no usable IPv4. */
     private fun resolveIPv4(host: String): InetAddress? {
-        try {
-            val all = InetAddress.getAllByName(host)
-            val ipv4 = all.firstOrNull { it is java.net.Inet4Address }
-            if (ipv4 != null) return ipv4
-            return all.firstOrNull()
+        return try {
+            InetAddress.getAllByName(host).firstOrNull { it is java.net.Inet4Address }
         } catch (e: UnknownHostException) {
-            return null
+            null
         }
     }
 

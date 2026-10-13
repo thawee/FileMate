@@ -62,6 +62,13 @@ class FileServerService : Service() {
 
         private const val SERVER_PORT = 8080
         private const val PROXY_PORT = 8081
+        private val MUTATING_ROUTES = setOf(
+            "/api/upload", "/api/delete", "/api/move", "/api/rename", "/api/mkdir", "/api/unzip"
+        )
+        // Largest body buffered for an authenticated upload; everything else is capped small
+        // so unauthenticated peers cannot exhaust memory with oversized request bodies.
+        private const val MAX_UPLOAD_BODY = 500 * 1024 * 1024
+        private const val SMALL_BODY_LIMIT = 1 * 1024 * 1024
     }
 
     @Volatile
@@ -76,6 +83,7 @@ class FileServerService : Service() {
         { file -> android.media.MediaScannerConnection.scanFile(this, arrayOf(file.absolutePath), null, null) }) }
 
     private var cachedMarkedJs: ByteArray = ByteArray(0)
+    private var cachedPurifyJs: ByteArray = ByteArray(0)
     private var wakeLock: android.os.PowerManager.WakeLock? = null
     private var serverStartTime: Long = 0L
 
@@ -97,6 +105,7 @@ class FileServerService : Service() {
         sharesChanged()
         serverStartTime = System.currentTimeMillis()
         AuthHelper.generateNewPin()
+        AuthThrottle.reset()
 
         val powerManager = getSystemService(Context.POWER_SERVICE) as android.os.PowerManager
         wakeLock = powerManager.newWakeLock(android.os.PowerManager.PARTIAL_WAKE_LOCK, "WebFS:ServerWakeLock")
@@ -122,6 +131,7 @@ class FileServerService : Service() {
             cachedCss = assets.open("style.css").readBytes()
             cachedJs = assets.open("script.js").readBytes()
             cachedMarkedJs = assets.open("marked.min.js").readBytes()
+            cachedPurifyJs = assets.open("purify.min.js").readBytes()
         } catch (e: Exception) {
             Log.e("FileServerService", "Failed to load assets", e)
         }
@@ -185,6 +195,19 @@ class FileServerService : Service() {
             server.setMaxRequestSize(500 * 1024 * 1024) // 500MB upload limit
             server.setOnReady { if (nioServer === server && server.isRunning) isRunning = true }
 
+            // DoS guard: only an authenticated upload may stream a large body into memory.
+            // Every other request (including any unauthenticated POST) is capped small, so a
+            // flood of oversized bodies cannot exhaust the heap before the handler runs auth.
+            server.setPreBodyCheck(NioHttpServer.PreBodyCheck { request ->
+                val target = try { NioHttpServer.splitRequestTarget(request.path ?: "/") }
+                    catch (_: IllegalArgumentException) { return@PreBodyCheck SMALL_BODY_LIMIT }
+                val reqPath = target[0]
+                val reqQuery = target[1]
+                val authed = try { OwnerRoutePolicy.authenticated(request, reqQuery, AuthHelper.currentPin.value) }
+                    catch (_: Exception) { false }
+                if (authed && reqPath == "/api/upload") MAX_UPLOAD_BODY else SMALL_BODY_LIMIT
+            })
+
             server.registerHttpHandler(NioHttpServer.Handler { request ->
                 handleRoute(request)
             })
@@ -213,30 +236,65 @@ class FileServerService : Service() {
         val isPublicAsset = OwnerRoutePolicy.isPublic(path)
         val cookie = request.getHeader("cookie", "")
         val currentPin = AuthHelper.currentPin.value
+        val clientIp = request.getRemoteHost() ?: ""
+        // Brute-force surface: /api/auth and every PIN-gated owner route. Lock out an IP that
+        // keeps failing before its credential is even checked.
+        val guardsAuth = path == "/api/auth" || !isPublicAsset
+        if (guardsAuth) {
+            val waitMs = AuthThrottle.retryAfterMs(clientIp)
+            if (waitMs > 0) {
+                return errorResponse(429, "Too many authentication attempts. Try again later.")
+                    .addHeader("Retry-After", ((waitMs + 999) / 1000).toString())
+            }
+        }
         val isAuthenticated = try { isPublicAsset || OwnerRoutePolicy.authenticated(request, query, currentPin) }
         catch (_: IllegalArgumentException) { return errorResponse(400, "Invalid query") }
         if (!isAuthenticated) {
-            return NioHttpServer.HttpResponse().setStatus(401, "Unauthorized")
+            // Only an EXPLICIT PIN submission (query/header/basic) counts as a brute-force
+            // attempt. A stale `pin=` cookie is ambient: the PIN rotates on each server start,
+            // so a returning browser auto-sends an old cookie on every parallel request of a
+            // page load. Counting those would lock out a legitimate user (and, behind NAT,
+            // everyone sharing their IP) before they can enter the new PIN. The real login
+            // channels the client and attackers use (/api/auth, x-pin, Authorization, ?pin)
+            // remain throttled.
+            val explicitPin = request.getHeader("authorization", "").isNotEmpty() ||
+                request.getHeader("x-pin", "").isNotEmpty() ||
+                parseQueryParam(query, "pin").isNotEmpty()
+            if (explicitPin) AuthThrottle.recordFailure(clientIp)
+            val res = NioHttpServer.HttpResponse().setStatus(401, "Unauthorized")
                 .addHeader("WWW-Authenticate", "Basic realm=\"ShareMate\"")
                 .addHeader("Content-Type", "application/json")
                 .setBody("{\"error\":\"Authentication required\"}".toByteArray())
+            // Expire a stale/invalid cookie so it stops riding along and self-heals.
+            if (request.getHeader("cookie", "").contains("pin=")) {
+                res.addHeader("Set-Cookie", "pin=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0")
+            }
+            return res
         }
+        if (!isPublicAsset) AuthThrottle.recordSuccess(clientIp)
         if (path == "/api/shares" || path.startsWith("/api/shares/")) {
             return shareRoutes.owner(request, path, sharedRoot ?: android.os.Environment.getExternalStorageDirectory())
+        }
+        // State-changing routes must be POST so they cannot be driven by a cross-site
+        // top-level navigation or <img>/<form> GET (CSRF). Combined with the SameSite=Strict
+        // auth cookie, this closes cookie-riding CSRF against the owner API.
+        if (path in MUTATING_ROUTES && request.method != "POST") {
+            return errorResponse(405, "Method not allowed")
         }
 
         val response = when {
             path == "/" || path == "/index.html" -> {
                 val res = htmlResponse(cachedHtml)
                 if (isAuthenticated && !isPublicAsset && !cookie.contains("pin=$currentPin")) {
-                    res.addHeader("Set-Cookie", "pin=$currentPin; Path=/; SameSite=Lax")
+                    res.addHeader("Set-Cookie", "pin=$currentPin; Path=/; HttpOnly; SameSite=Strict")
                 }
                 res
             }
             path == "/style.css" -> cssResponse(cachedCss)
             path == "/script.js" -> jsResponse(cachedJs)
             path == "/marked.min.js" -> jsResponse(cachedMarkedJs)
-            path == "/api/auth" -> authResponse(query)
+            path == "/purify.min.js" -> jsResponse(cachedPurifyJs)
+            path == "/api/auth" -> authResponse(query, clientIp)
             path == "/api/health" -> jsonResponse("{\"status\":\"ok\"}")
             path == "/api/system" -> jsonResponse(buildSystemJson())
             path == "/api/files" -> filesResponse(query)
@@ -260,7 +318,7 @@ class FileServerService : Service() {
                 } else {
                     val res = htmlResponse(cachedHtml)
                     if (isAuthenticated && !isPublicAsset && !cookie.contains("pin=$currentPin")) {
-                        res.addHeader("Set-Cookie", "pin=$currentPin; Path=/; SameSite=Lax")
+                        res.addHeader("Set-Cookie", "pin=$currentPin; Path=/; HttpOnly; SameSite=Strict")
                     }
                     res
                 }
@@ -274,6 +332,18 @@ class FileServerService : Service() {
         .setStatus(200, "OK")
         .addHeader("Content-Type", "text/html; charset=utf-8")
         .addHeader("Content-Length", body.size.toString())
+        // Defense-in-depth. The UI relies on inline onclick handlers, so script-src keeps
+        // 'unsafe-inline'; this still blocks external/injected <script src>, <base> hijack,
+        // plugin objects, and framing (clickjacking). The markdown XSS sink is sanitized
+        // separately with DOMPurify.
+        .addHeader("Content-Security-Policy",
+            "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; " +
+            "img-src 'self' data: blob:; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'")
+        .addHeader("X-Content-Type-Options", "nosniff")
+        .addHeader("X-Frame-Options", "DENY")
+        // The owner authenticates with ?pin= on some requests; no-referrer stops that query
+        // string leaking to any origin via the Referer header on subrequests/navigations.
+        .addHeader("Referrer-Policy", "no-referrer")
         .setBody(body)
 
     private fun cssResponse(body: ByteArray) = NioHttpServer.HttpResponse()
@@ -674,13 +744,15 @@ class FileServerService : Service() {
     }
 
 
-    private fun authResponse(query: String): NioHttpServer.HttpResponse {
+    private fun authResponse(query: String, clientIp: String): NioHttpServer.HttpResponse {
         val pin = parseQueryParam(query, "pin")
         if (AuthHelper.verifyPin(pin)) {
+            AuthThrottle.recordSuccess(clientIp)
             val response = jsonResponse("{\"status\":\"ok\",\"authenticated\":true}")
-            response.addHeader("Set-Cookie", "pin=$pin; Path=/; SameSite=Lax")
+            response.addHeader("Set-Cookie", "pin=$pin; Path=/; HttpOnly; SameSite=Strict")
             return response
         }
+        AuthThrottle.recordFailure(clientIp)
         return errorResponse(401, "Invalid PIN")
     }
 
