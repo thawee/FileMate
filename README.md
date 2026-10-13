@@ -6,7 +6,7 @@ ShareMate is the local sharing app in the Mate series, alongside MusicMate, Trad
 
 ## Install the preview
 
-Download the APK from the [ShareMate releases](https://github.com/thawee/FileMate/releases) page. Allow installation from your browser or file manager when Android prompts you.
+Download the APK from the [ShareMate releases](https://github.com/thawee/ShareMate/releases) page. Allow installation from your browser or file manager when Android prompts you.
 
 Version 2.3.1 is a debug-signed preview for testing. It can update an existing installation only if that installation uses the same signing key.
 
