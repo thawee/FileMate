@@ -7,7 +7,7 @@ import java.net.URLDecoder
 import java.util.Base64
 
 object OwnerRoutePolicy {
-    private val publicPaths = setOf("/style.css", "/script.js", "/marked.min.js", "/api/auth")
+    private val publicPaths = setOf("/style.css", "/script.js", "/marked.min.js", "/purify.min.js", "/api/auth")
     fun isPublic(path: String) = path in publicPaths
     fun authenticated(request: NioHttpServer.HttpRequest, query: String, pin: String): Boolean {
         val expected = "Basic " + Base64.getEncoder().encodeToString("admin:$pin".toByteArray())
